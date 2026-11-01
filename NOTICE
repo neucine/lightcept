@@ -1,0 +1,25 @@
+Lightcept
+Copyright (c) 2026 Lightcept contributors.
+Licensed under the Mozilla Public License, version 2.0 (LICENSE).
+
+Third-party material
+
+Inter (`assets/fonts/Inter-*.ttf`) is Copyright Rasmus Andersson and is licensed under the SIL Open
+Font License 1.1. See `assets/fonts/OFL-Inter.txt`.
+
+The Lightcept app icon is original work for this repository and is covered by the
+same MPL-2.0 terms as the rest of the project.
+
+The temperature/tint coordinate conversion in
+`src/engine/color/temperature_tint.cy` adapts code from LightCraft's
+`crates/color/src/cct.rs` at commit
+`b3d392b4994ee99dc389890f006600769d0c4ff5`.
+Copyright (c) 2026 ArtCraft Team and the LightCraft contributors. The adapted
+material is used under the MIT license; see `LICENSES/LightCraft-MIT.txt`.
+
+The Nikon lossless Huffman category table in
+`src/engine/raw/nef/nef_lossless.cy` was checked against the LightCraft table
+at the same revision and an independently decoded Nikon Z8 source.
+
+The Nikon Z6 II and Z8 camera color matrices in `src/engine/color/nef/` use
+LibRaw 0.22.2 reference values. Lightcept does not include or link LibRaw code.

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require private Cyna source access
+        env:
+          CYNA_SOURCE_TOKEN: ${{ secrets.CYNA_SOURCE_TOKEN }}
+        run: |
+          if [[ -z "$CYNA_SOURCE_TOKEN" ]]; then
+            echo "CYNA_SOURCE_TOKEN needs read-only access to neucine/cyna and neucine/zig-libs" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: neucine/cyna
+          ref: 45ac9a46c5fb75f299b3cc00a630017e773d5826
+          token: ${{ secrets.CYNA_SOURCE_TOKEN }}
+          path: target/cyna-toolchain/cyna
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: neucine/zig-libs
+          ref: a91b58271be94a4e402a856403fe0fa83add1709
+          token: ${{ secrets.CYNA_SOURCE_TOKEN }}
+          path: target/cyna-toolchain/zig-libs
+          persist-credentials: false
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - name: Build pinned Cyna compiler
+        run: scripts/setup-cyna-toolchain.sh
+        env:
+          LIGHTCEPT_CYNA_PRECHECKED_OUT: 1
+      - name: Check native boundaries
+        run: scripts/check-boundaries.sh
+      - name: Check and test Cyna source
+        run: |
+          target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src --check
+          target/cyna-toolchain/cyna/zig-out/bin/cyna check src
+          python3 scripts/test-cyna-native.py
+      - name: Test qualification tools
+        run: |
+          python3 scripts/test-compare-camera-chart.py
+          python3 scripts/test_analyze_camera_render.py
+          python3 scripts/test_compare_native_precision.py
