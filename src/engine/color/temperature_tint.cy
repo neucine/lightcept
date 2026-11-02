@@ -2,7 +2,7 @@
 // (MIT OR Apache-2.0; see NOTICE). Kim's Planckian approximation, extended
 // linearly in mired outside 1667..25000 K. Tint = CIE 1960 Duv * 3000;
 // positive source-green offset produces a magenta correction.
-extern c("sqrt") fn sqrt(value: c_double): c_double;
+import std.math;
 
 fn clamp(value: f64, low: f64, high: f64): f64 {
     if value < low {
@@ -59,7 +59,7 @@ fn normal(t: f64): [2]f64 {
     const b = locus(1000000.0 / clamp(m - 1.0, 1.0, 1000000.0));
     const du = b[0] - a[0];
     const dv = b[1] - a[1];
-    const length = sqrt((du * du + dv * dv) as c_double) as f64;
+    const length = math.sqrt_f64((du * du + dv * dv) as f64) as f64;
     if du < 0.0 {
         return [dv / length, -du / length];
     }

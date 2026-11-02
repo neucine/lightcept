@@ -16,6 +16,11 @@
 - Keep pixel mathematics in the component that owns the operation. The Cyna
   `pipeline` module composes and validates stage order; it must not collect
   unrelated processing kernels.
+- Follow `docs/architecture/lightcept-engine-boundary.md` for module ownership
+  and allowed imports. Keep shared modules at a component root and format
+  modules in a format subfolder. Register each new RAW format in
+  `scripts/check-engine-boundaries.py`; do not bypass the checker with a broad
+  exclusion.
 - Before adding a decoder or processing stage, review relevant external
   engines and published methods. Record what they teach, then define
   Lightcept's own behavior, tests, and component owner. Compare matched

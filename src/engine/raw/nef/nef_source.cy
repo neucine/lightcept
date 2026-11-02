@@ -14,13 +14,13 @@ pub struct NefStorage {
     pub strip_bytes: u32;
     pub orientation: u32;
     pub cfa: u32;
-    pub status: c_int;
+    pub status: i32;
 }
 
 pub struct NefSource {
     pub storage: NefStorage;
     pub maker: NefMakerMetadata;
-    pub status: c_int;
+    pub status: i32;
 }
 
 struct Entry {
@@ -29,7 +29,7 @@ struct Entry {
     value: u32;
 }
 
-fn empty(status: c_int): NefStorage {
+fn empty(status: i32): NefStorage {
     return {
         width: 0,
         height: 0,
@@ -41,7 +41,7 @@ fn empty(status: c_int): NefStorage {
     };
 }
 
-fn directory_valid(input: *const c_uchar, length: usize, offset: usize): bool {
+fn directory_valid(input: *const u8, length: usize, offset: usize): bool {
     if not tiff.has_range(length, offset, 2) {
         return false;
     }
@@ -49,7 +49,7 @@ fn directory_valid(input: *const c_uchar, length: usize, offset: usize): bool {
     return count <= 256 and tiff.has_range(length, offset + 2, count * 12 + 4);
 }
 
-fn find(input: *const c_uchar, offset: usize, tag: u16): ?Entry {
+fn find(input: *const u8, offset: usize, tag: u16): ?Entry {
     const count = tiff.u16le(input, offset) as usize;
     var result: ?Entry = none;
     var index: usize = 0;
@@ -83,14 +83,14 @@ fn scalar(entry: Entry): ?u32 {
     return none;
 }
 
-fn value(input: *const c_uchar, offset: usize, tag: u16): ?u32 {
+fn value(input: *const u8, offset: usize, tag: u16): ?u32 {
     if find(input, offset, tag) is entry {
         return scalar(entry);
     }
     return none;
 }
 
-pub fn inspect(input: *const c_uchar, length: usize): NefStorage {
+pub fn inspect(input: *const u8, length: usize): NefStorage {
     if (input as! usize) == 0 or not tiff.has_range(length, 0, 8) {
         return empty(1);
     }
@@ -277,7 +277,7 @@ pub fn inspect(input: *const c_uchar, length: usize): NefStorage {
 // Resolve the exact Z8 storage layout and its Nikon maker-note metadata in
 // one checked source view. No sensor codes or pixels are decoded here.
 pub fn inspect_source(source: []const u8): NefSource {
-    const storage = inspect(source.ptr as! *const c_uchar, source.len());
+    const storage = inspect(source.ptr as! *const u8, source.len());
     var result: NefSource = {
         storage: storage,
         maker: nef_makernote.parse(source[0..0], 0, 0),
@@ -286,7 +286,7 @@ pub fn inspect_source(source: []const u8): NefSource {
     if storage.status != 0 {
         return result;
     }
-    const input = source.ptr as! *const c_uchar;
+    const input = source.ptr as! *const u8;
     const root = tiff.u32le(input, 4) as usize;
     if value(input, root, 34665) is exif_offset {
         const exif = exif_offset as usize;

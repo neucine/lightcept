@@ -1,5 +1,5 @@
 import .engine.pipeline.pipeline;
-import .engine.pipeline.stage_manifest;
+import .engine.pipeline.develop_stage_manifest;
 import .engine.develop.contrast;
 
 // The parameter half of the headless working-plan contract. This is a report
@@ -15,12 +15,12 @@ pub struct ParameterEntry {
     pub index: u32;
     pub name: string;
     pub units: string;
-    pub minimum: c_double;
-    pub maximum: c_double;
-    pub neutral: c_double;
+    pub minimum: f64;
+    pub maximum: f64;
+    pub neutral: f64;
 }
 
-fn entry(stage: string, stage_id: u32, index: u32, name: string, units: string, minimum: c_double, maximum: c_double, neutral: c_double): ParameterEntry {
+fn entry(stage: string, stage_id: u32, index: u32, name: string, units: string, minimum: f64, maximum: f64, neutral: f64): ParameterEntry {
     return {
         stage: stage,
         stage_id: stage_id,
@@ -56,20 +56,20 @@ pub fn rows(plan_kind: u32): [:]ParameterEntry {
     ];
 }
 
-fn write_float(base: usize, offset: usize, value: c_double): void {
+fn write_float(base: usize, offset: usize, value: f64): void {
     unchecked {
-        *((base + offset) as! *c_double) = value;
+        *((base + offset) as! *f64) = value;
     }
 }
 
 fn write_row(base: usize, index: usize, row: ParameterEntry): void {
     const slot = base + index * descriptor_bytes;
-    stage_manifest.write_padded(slot, 0, row.stage, 24);
-    stage_manifest.write_number(slot, 24, row.stage_id);
-    stage_manifest.write_number(slot, 28, row.algorithm_version);
-    stage_manifest.write_number(slot, 32, row.index);
-    stage_manifest.write_padded(slot, 36, row.name, 24);
-    stage_manifest.write_padded(slot, 60, row.units, 12);
+    develop_stage_manifest.write_padded(slot, 0, row.stage, 24);
+    develop_stage_manifest.write_number(slot, 24, row.stage_id);
+    develop_stage_manifest.write_number(slot, 28, row.algorithm_version);
+    develop_stage_manifest.write_number(slot, 32, row.index);
+    develop_stage_manifest.write_padded(slot, 36, row.name, 24);
+    develop_stage_manifest.write_padded(slot, 60, row.units, 12);
     write_float(slot, 72, row.minimum);
     write_float(slot, 80, row.maximum);
     write_float(slot, 88, row.neutral);
@@ -77,7 +77,7 @@ fn write_row(base: usize, index: usize, row: ParameterEntry): void {
 
 // Status: 0 success, 3 shape, 4 unknown plan kind. Fixed-size output is
 // completely initialized so stale memory cannot be mistaken for a row.
-export c("lc_cyna_img_v1_describe_working_plan_parameters") fn describe_working_plan_parameters(plan_kind: c_uint, output: *c_uchar, output_len: c_size_t, count: *c_uint, count_len: c_size_t, version: *c_uint, version_len: c_size_t): c_int {
+fn describe_working_plan_parameters(plan_kind: u32, output: *u8, output_len: usize, count: *u32, count_len: usize, version: *u32, version_len: usize): i32 {
     if output_len as usize != max_parameters * descriptor_bytes or count_len as usize != 1 or version_len as usize != 1 {
         return 3;
     }
@@ -89,7 +89,7 @@ export c("lc_cyna_img_v1_describe_working_plan_parameters") fn describe_working_
     var byte: usize = 0;
     while byte < max_parameters * descriptor_bytes {
         unchecked {
-            *((base + byte) as! *c_uchar) = 0;
+            *((base + byte) as! *u8) = 0;
         }
         byte = byte + 1;
     }
@@ -99,8 +99,8 @@ export c("lc_cyna_img_v1_describe_working_plan_parameters") fn describe_working_
         index = index + 1;
     }
     unchecked {
-        *(count as! *c_uint) = parameters.len() as c_uint;
-        *(version as! *c_uint) = parameter_contract_version as c_uint;
+        *(count as! *u32) = parameters.len() as u32;
+        *(version as! *u32) = parameter_contract_version as u32;
     }
     return 0;
 }

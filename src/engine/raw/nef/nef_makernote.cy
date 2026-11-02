@@ -12,7 +12,7 @@ pub struct NefMakerMetadata {
     pub white: u32;
     pub red_gain: f64;
     pub blue_gain: f64;
-    pub status: c_int;
+    pub status: i32;
 }
 
 struct Entry {
@@ -21,7 +21,7 @@ struct Entry {
     value: u32;
 }
 
-fn empty(status: c_int): NefMakerMetadata {
+fn empty(status: i32): NefMakerMetadata {
     return {
         seeds: [0] ** 4,
         crop: [0] ** 4,
@@ -33,7 +33,7 @@ fn empty(status: c_int): NefMakerMetadata {
     };
 }
 
-fn find(input: *const c_uchar, offset: usize, tag: u16): ?Entry {
+fn find(input: *const u8, offset: usize, tag: u16): ?Entry {
     const count = tiff.u16le(input, offset) as usize;
     var result: ?Entry = none;
     var index: usize = 0;
@@ -55,7 +55,7 @@ fn find(input: *const c_uchar, offset: usize, tag: u16): ?Entry {
     return result;
 }
 
-fn four_shorts(input: *const c_uchar, length: usize, offset: usize, tag: u16): ?[4]u32 {
+fn four_shorts(input: *const u8, length: usize, offset: usize, tag: u16): ?[4]u32 {
     if find(input, offset, tag) is entry {
         if entry.kind != 3 or entry.count != 4 or not tiff.has_range(length, entry.value as usize, 8) {
             return none;
@@ -83,7 +83,7 @@ pub fn parse(note: []const u8, stored_width: u32, stored_height: u32): NefMakerM
     }
     const base = 10;
     const length = note.len() - base;
-    const input = note[base..].ptr as! *const c_uchar;
+    const input = note[base..].ptr as! *const u8;
     const directory = tiff.u32le(input, 4) as usize;
     if not tiff.has_range(length, directory, 2) {
         return empty(1);

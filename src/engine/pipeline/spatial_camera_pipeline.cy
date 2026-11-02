@@ -2,7 +2,7 @@ import .engine.raw.bayer;
 import .engine.color.spatial_highlight;
 import .engine.color.white_balance;
 import .engine.render.camera_rgb_preview;
-import .engine.core.float_round;
+import std.math;
 
 pub struct SpatialRequirements {
     pub camera_channels: usize;
@@ -12,7 +12,7 @@ pub struct SpatialRequirements {
     pub coarse_pixels: usize;
     pub source_levels: usize;
     pub rim_levels: usize;
-    pub status: c_int;
+    pub status: i32;
 }
 
 pub const max_spatial_scratch_bytes: usize = 768 * 1024 * 1024;
@@ -97,29 +97,34 @@ fn level_metadata(meta: []usize, width: usize, height: usize, channels: usize): 
 // SpatialHeadroomV5 camera stage. Input is cropped, headroom-preserving,
 // black-subtracted Bayer f32. The output is encoded sRGB RGBA8. All scratch
 // remains caller-owned and is undefined after a nonzero result.
-pub fn render(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar): c_int {
+pub fn render(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
     return render_with_exposure(normalized, source_width, source_height, cfa, matrix, neutral, default_exposure, 0.0, orientation, camera, band, source, rim, lum, touched, near, output, width, height, cancelled, context);
 }
 
-pub fn render_with_exposure(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, user_exposure: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar): c_int {
+pub fn render_with_exposure(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, user_exposure: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
     return render_with_develop(normalized, source_width, source_height, cfa, matrix, neutral, default_exposure, user_exposure, 1.0, orientation, camera, band, source, rim, lum, touched, near, output, width, height, cancelled, context);
 }
 
-pub fn render_with_develop(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, user_exposure: f64, contrast_slope: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar): c_int {
+pub fn render_with_develop(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, matrix: []const f64, neutral: [3]f64, default_exposure: f64, user_exposure: f64, contrast_slope: f64, orientation: u32, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, output: []u8, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
+    if width == 0 or height == 0 or height > 4194304 / width or output.len() != width * height * 4 or matrix.len() != 9 {
+        return 4;
+    }
+    const status = prepare_camera(normalized, source_width, source_height, cfa, neutral, camera, band, source, rim, lum, touched, near, cancelled, context);
+    if status != 0 {
+        return status;
+    }
+    const camera_matrix: [9]f64 = [matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5], matrix[6], matrix[7], matrix[8]];
+    return render_prepared(camera, source_width, source_height, camera_matrix, default_exposure, user_exposure, contrast_slope, orientation, output, width, height, cancelled, context);
+}
+
+// Produces a camera-linear RGB raster after demosaic, white balance and
+// spatial highlight reconstruction. The raster is independent of user edits.
+pub fn prepare_camera(normalized: []const f32, source_width: usize, source_height: usize, cfa: [4]u32, neutral: [3]f64, camera: []f32, band: []f64, source: []f32, rim: []f32, lum: []f32, touched: []u8, near: []u8, cancelled: fn (usize): bool, context: usize): i32 {
     const need = spatial_requirements(source_width, source_height);
     if need.status != 0 {
         return need.status;
     }
-    if normalized.len() != source_width * source_height or matrix.len() != 9 or camera.len() != need.camera_channels or band.len() != need.band_channels or source.len() != need.source_channels or rim.len() != need.rim_channels or lum.len() != need.coarse_pixels or touched.len() != need.coarse_pixels or near.len() != need.coarse_pixels or width == 0 or height == 0 or height > 4194304 / width or output.len() != width * height * 4 {
-        return 4;
-    }
-    var visual_width = source_width;
-    var visual_height = source_height;
-    if orientation >= 5 and orientation <= 8 {
-        visual_width = source_height;
-        visual_height = source_width;
-    }
-    if orientation < 1 or orientation > 8 or width > visual_width or height > visual_height {
+    if normalized.len() != source_width * source_height or camera.len() != need.camera_channels or band.len() != need.band_channels or source.len() != need.source_channels or rim.len() != need.rim_channels or lum.len() != need.coarse_pixels or touched.len() != need.coarse_pixels or near.len() != need.coarse_pixels {
         return 4;
     }
     var source_meta: [96]usize = [0] ** 96;
@@ -128,7 +133,7 @@ pub fn render_with_develop(normalized: []const f32, source_width: usize, source_
     level_metadata(rim_meta[0..need.rim_levels * 3], (source_width + 3) / 4, (source_height + 3) / 4, 4);
     var row: usize = 0;
     while row < source_height {
-        if cancelled(context) != 0 {
+        if cancelled(context) {
             return 7;
         }
         var rows: usize = 32;
@@ -136,31 +141,20 @@ pub fn render_with_develop(normalized: []const f32, source_width: usize, source_
             rows = source_height - row;
         }
         const channels = rows * source_width * 3;
-        const status = bayer.demosaic_normalized_bayer_rows_camera(normalized.ptr as! *const c_float, normalized.len() as c_size_t,
-            source_width as c_size_t, source_height as c_size_t, cfa[0..].ptr as! *const c_uint, 4,
-            row as c_size_t, rows as c_size_t, band.ptr as! *c_double, channels as c_size_t, 1
+        const status = bayer.demosaic_rows_f32(normalized, source_width,
+            source_height, cfa, row, rows, band, camera
         );
         if status != 0 {
             return status;
-        }
-        var index: usize = 0;
-        while index < channels {
-            const rounded = float_round.to_f32(band[index]);
-            if rounded is value {
-                camera[row * source_width * 3 + index] = value;
-            } else {
-                return 2;
-            }
-            index = index + 1;
         }
         row = row + rows;
     }
     if neutral[0] < 0.05 or neutral[0] > 8.0 or neutral[1] < 0.05 or neutral[1] > 8.0 or neutral[2] < 0.05 or neutral[2] > 8.0 {
         return 5;
     }
-    const red_gain = float_round.to_f32(white_balance.camera_neutral_gain(neutral[0] as c_double) as f64);
-    const green_gain = float_round.to_f32(white_balance.camera_neutral_gain(neutral[1] as c_double) as f64);
-    const blue_gain = float_round.to_f32(white_balance.camera_neutral_gain(neutral[2] as c_double) as f64);
+    const red_gain = math.to_f32_rounded(white_balance.camera_neutral_gain(neutral[0] as f64) as f64);
+    const green_gain = math.to_f32_rounded(white_balance.camera_neutral_gain(neutral[1] as f64) as f64);
+    const blue_gain = math.to_f32_rounded(white_balance.camera_neutral_gain(neutral[2] as f64) as f64);
     var gain: [3]f32 = [0.0, 0.0, 0.0];
     if red_gain is red {
         gain[0] = red;
@@ -177,24 +171,38 @@ pub fn render_with_develop(normalized: []const f32, source_width: usize, source_
     } else {
         return 5;
     }
-    if cancelled(context) != 0 {
+    if cancelled(context) {
         return 7;
     }
-    const spatial_status = spatial_highlight.reconstruct(camera.ptr as! *c_float, source_width as c_size_t, source_height as c_size_t,
-        gain[0..].ptr as! *const c_float, source.ptr as! *c_float, source_meta[0..].ptr as! *const c_size_t, need.source_levels as c_size_t,
-        rim.ptr as! *c_float, rim_meta[0..].ptr as! *const c_size_t, need.rim_levels as c_size_t,
-        lum.ptr as! *c_float, touched.ptr as! *c_uchar, near.ptr as! *c_uchar,
-        camera.len() as c_size_t, 3, source.len() as c_size_t, (need.source_levels * 3) as c_size_t,
-        rim.len() as c_size_t, (need.rim_levels * 3) as c_size_t, lum.len() as c_size_t, touched.len() as c_size_t, near.len() as c_size_t
+    const spatial_status = spatial_highlight.reconstruct(camera.ptr as! *f32, source_width as usize, source_height as usize,
+        gain[0..].ptr as! *const f32, source.ptr as! *f32, source_meta[0..].ptr as! *const usize, need.source_levels as usize,
+        rim.ptr as! *f32, rim_meta[0..].ptr as! *const usize, need.rim_levels as usize,
+        lum.ptr as! *f32, touched.ptr as! *u8, near.ptr as! *u8,
+        camera.len() as usize, 3, source.len() as usize, (need.source_levels * 3) as usize,
+        rim.len() as usize, (need.rim_levels * 3) as usize, lum.len() as usize, touched.len() as usize, near.len() as usize
     );
     if spatial_status != 0 {
         return spatial_status;
     }
-    if cancelled(context) != 0 {
+    if cancelled(context) {
         return 7;
     }
-    return camera_rgb_preview.render_preview_with_contrast(camera.ptr as! *const c_float, camera.len() as c_size_t, source_width as c_size_t, source_height as c_size_t,
-        matrix.ptr as! *const c_double, 9, output.ptr as! *c_uchar, output.len() as c_size_t,
-        width as c_size_t, height as c_size_t, default_exposure as c_double, user_exposure as c_double, contrast_slope as c_double, orientation as c_uint, cancelled, context
-    );
+    return 0;
+}
+
+// Applies user edits to a prepared camera-linear RGB raster.
+pub fn render_prepared(camera: []const f32, source_width: usize, source_height: usize, matrix: [9]f64, default_exposure: f64, user_exposure: f64, contrast_slope: f64, orientation: u32, output: []u8, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
+    return camera_rgb_preview.render_preview_with_contrast(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *u8, output.len(), width, height, default_exposure, user_exposure, contrast_slope, orientation, cancelled, context);
+}
+
+// WorkingPreviewV1: build an oriented, area-averaged f64 scene-linear
+// Rec.2020/D65 preview after reconstruction. Output is width * height * 3.
+pub fn prepare_working_preview(camera: []const f32, source_width: usize, source_height: usize, matrix: [9]f64, orientation: u32, output: []f64, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
+    return camera_rgb_preview.camera_to_working_preview(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *f64, output.len(), width, height, orientation, cancelled, context);
+}
+
+// WorkingPreviewV1 output: apply EV and contrast to a borrowed f64 working
+// preview, then encode opaque sRGB RGBA8. Cancellation is checked per row.
+pub fn render_prepared_raw(working: *const f64, working_length: usize, output: *u8, output_length: usize, width: usize, height: usize, default_exposure: f64, user_exposure: f64, contrast_slope: f64, cancelled: fn (usize): bool, context: usize): i32 {
+    return camera_rgb_preview.render_working_rgba8(working, working_length, output, output_length, width, height, default_exposure, user_exposure, contrast_slope, cancelled, context);
 }

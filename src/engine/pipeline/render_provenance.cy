@@ -2,10 +2,10 @@
 //
 // Cyna owns the identity of a render pass: which stages run for a qualified source family, in what
 // order, which algorithm and version each stage pins, and which stage carries an asset digest. The
-// Rust host reads the report, computes the digests for the asset slots named here, and assembles the
-// persisted render contract; it never names a stage, chooses an algorithm, or orders the pass.
-// Stage names match the develop-stage contract in stage_manifest.cy so one stage keeps one identity.
-import .engine.pipeline.stage_manifest;
+// A product caller reads the report, computes digests for its asset slots, and
+// assembles a persisted render contract. Cyna names and orders the stages.
+// Stage names match the develop-stage contract in develop_stage_manifest.cy so one stage keeps one identity.
+import .engine.pipeline.develop_stage_manifest;
 
 const provenance_contract_version: u32 = 1;
 pub const provenance_name_bytes: usize = 24;
@@ -213,45 +213,45 @@ pub fn storage_variant_label(family: u32, bits: u32): string {
 // algorithm name, then the algorithm version and the asset slot.
 fn write_row(base: usize, index: usize, entry: RenderProvenanceRow): void {
     const slot = base + index * provenance_descriptor_bytes;
-    stage_manifest.write_padded(slot, 0, entry.stage, provenance_name_bytes);
-    stage_manifest.write_padded(slot, provenance_name_bytes, entry.algorithm, provenance_algorithm_bytes);
-    stage_manifest.write_number(slot, provenance_name_bytes + provenance_algorithm_bytes, entry.version);
-    stage_manifest.write_number(slot, provenance_name_bytes + provenance_algorithm_bytes + 4, entry.asset);
+    develop_stage_manifest.write_padded(slot, 0, entry.stage, provenance_name_bytes);
+    develop_stage_manifest.write_padded(slot, provenance_name_bytes, entry.algorithm, provenance_algorithm_bytes);
+    develop_stage_manifest.write_number(slot, provenance_name_bytes + provenance_algorithm_bytes, entry.version);
+    develop_stage_manifest.write_number(slot, provenance_name_bytes + provenance_algorithm_bytes + 4, entry.asset);
 }
 
 // Report the render provenance for one qualified source family. Status codes are the transport
 // codes above.
-export c("lc_cyna_img_v1_describe_render_provenance") fn describe_render_provenance(
-    family: c_int,
-    demosaic: c_int,
-    highlight: c_int,
-    white_balance: c_int,
-    bits: c_int,
-    rows: *c_uchar,
-    rows_len: c_size_t,
-    row_count: *c_uint,
-    row_count_len: c_size_t,
-    variant: *c_uchar,
-    variant_len: c_size_t,
-    contract_version: *c_uint,
-    contract_version_len: c_size_t
-): c_int {
+fn describe_render_provenance(
+    family: i32,
+    demosaic: i32,
+    highlight: i32,
+    white_balance: i32,
+    bits: i32,
+    rows: *u8,
+    rows_len: usize,
+    row_count: *u32,
+    row_count_len: usize,
+    variant: *u8,
+    variant_len: usize,
+    contract_version: *u32,
+    contract_version_len: usize
+): i32 {
     if rows_len as usize != max_provenance_rows * provenance_descriptor_bytes
     or row_count_len as usize != 1
     or variant_len as usize != variant_label_bytes
     or contract_version_len as usize != 1 {
-        return provenance_shape as c_int;
+        return provenance_shape as i32;
     }
     const entries = render_provenance(family as u32, demosaic as u32, highlight as u32, white_balance as u32);
     if entries.len() == 0 {
-        return provenance_unknown_selector as c_int;
+        return provenance_unknown_selector as i32;
     }
     if entries.len() > max_provenance_rows {
-        return provenance_limit as c_int;
+        return provenance_limit as i32;
     }
     const label = storage_variant_label(family as u32, bits as u32);
     if label.len() == 0 or label.len() > variant_label_bytes {
-        return provenance_unknown_selector as c_int;
+        return provenance_unknown_selector as i32;
     }
     var index: usize = 0;
     while index < max_provenance_rows {
@@ -262,36 +262,36 @@ export c("lc_cyna_img_v1_describe_render_provenance") fn describe_render_provena
         }
         index = index + 1;
     }
-    stage_manifest.write_padded(variant as! usize, 0, label, variant_label_bytes);
+    develop_stage_manifest.write_padded(variant as! usize, 0, label, variant_label_bytes);
     unchecked {
-        *(row_count as! *c_uint) = entries.len() as c_uint;
-        *(contract_version as! *c_uint) = provenance_contract_version as c_uint;
+        *(row_count as! *u32) = entries.len() as u32;
+        *(contract_version as! *u32) = provenance_contract_version as u32;
     }
-    return provenance_ok as c_int;
+    return provenance_ok as i32;
 }
 
 // Separate report for the staged contrast candidate. The wire shape stays
 // fixed but its contract version is 2 so it cannot alias the fused pass.
-export c("lc_cyna_img_v1_describe_diagnostic_contrast_provenance") fn describe_diagnostic_contrast_provenance(
-    family: c_int, demosaic: c_int, highlight: c_int, white_balance: c_int, bits: c_int,
-    rows: *c_uchar, rows_len: c_size_t, row_count: *c_uint, row_count_len: c_size_t,
-    variant: *c_uchar, variant_len: c_size_t, contract_version: *c_uint, contract_version_len: c_size_t
-): c_int {
+fn describe_diagnostic_contrast_provenance(
+    family: i32, demosaic: i32, highlight: i32, white_balance: i32, bits: i32,
+    rows: *u8, rows_len: usize, row_count: *u32, row_count_len: usize,
+    variant: *u8, variant_len: usize, contract_version: *u32, contract_version_len: usize
+): i32 {
     if rows_len as usize != max_provenance_rows * provenance_descriptor_bytes
     or row_count_len as usize != 1 or variant_len as usize != variant_label_bytes
     or contract_version_len as usize != 1 {
-        return provenance_shape as c_int;
+        return provenance_shape as i32;
     }
     const entries = diagnostic_contrast_provenance(family as u32, demosaic as u32, highlight as u32, white_balance as u32);
     if entries.len() == 0 {
-        return provenance_unknown_selector as c_int;
+        return provenance_unknown_selector as i32;
     }
     if entries.len() > max_provenance_rows {
-        return provenance_limit as c_int;
+        return provenance_limit as i32;
     }
     const label = storage_variant_label(family as u32, bits as u32);
     if label.len() == 0 or label.len() > variant_label_bytes {
-        return provenance_unknown_selector as c_int;
+        return provenance_unknown_selector as i32;
     }
     var index: usize = 0;
     while index < max_provenance_rows {
@@ -302,10 +302,10 @@ export c("lc_cyna_img_v1_describe_diagnostic_contrast_provenance") fn describe_d
         }
         index = index + 1;
     }
-    stage_manifest.write_padded(variant as! usize, 0, label, variant_label_bytes);
+    develop_stage_manifest.write_padded(variant as! usize, 0, label, variant_label_bytes);
     unchecked {
-        *(row_count as! *c_uint) = entries.len() as c_uint;
-        *(contract_version as! *c_uint) = 2;
+        *(row_count as! *u32) = entries.len() as u32;
+        *(contract_version as! *u32) = 2;
     }
-    return provenance_ok as c_int;
+    return provenance_ok as i32;
 }

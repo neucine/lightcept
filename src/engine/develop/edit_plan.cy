@@ -1,4 +1,4 @@
-import .engine.pipeline.pipeline;
+import .engine.develop.control_bounds;
 import .engine.develop.black_point;
 import .engine.develop.contrast;
 import .engine.develop.shadows;
@@ -22,16 +22,16 @@ pub const mode_target: u32 = 1;
 pub const mode_delta: u32 = 2;
 
 pub fn exposure_min(): f64 {
-    return pipeline.working_exposure_min() as f64;
+    return control_bounds.working_exposure_min() as f64;
 }
 pub fn exposure_max(): f64 {
-    return pipeline.working_exposure_max() as f64;
+    return control_bounds.working_exposure_max() as f64;
 }
 pub fn chroma_min(): f64 {
-    return pipeline.working_chroma_min() as f64;
+    return control_bounds.working_chroma_min() as f64;
 }
 pub fn chroma_max(): f64 {
-    return pipeline.working_chroma_max() as f64;
+    return control_bounds.working_chroma_max() as f64;
 }
 
 pub struct EditDefinition {

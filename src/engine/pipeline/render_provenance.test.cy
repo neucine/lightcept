@@ -1,5 +1,5 @@
 import .engine.pipeline.render_provenance;
-import .engine.pipeline.stage_manifest;
+import .engine.pipeline.develop_stage_manifest;
 
 // Struct values are not comparable in Cyna, so identity is asserted field by field.
 fn same_row(a: render_provenance.RenderProvenanceRow, b: render_provenance.RenderProvenanceRow): bool {
@@ -75,7 +75,7 @@ test "the diagnostic reconstruction choices change only their own rows" {
 
 test "the render pass names every develop capability with the contract's stage name" {
     const rows = render_provenance.render_provenance(1, 1, 0, 0);
-    const contract = stage_manifest.declared_stages();
+    const contract = develop_stage_manifest.declared_stages();
     // Steps that carry no edit (container, decode, sensor, demosaic, resample, output) name the
     // render identity, not a develop capability. A step that is a develop capability must appear
     // in the contract under the same name so one stage keeps one identity across both tables.

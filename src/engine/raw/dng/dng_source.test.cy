@@ -1,13 +1,13 @@
 import .engine.raw.dng.dng_source;
 
-fn no_cancel(context: *const c_uchar): c_int {
+fn no_cancel(context: usize): bool {
     const ignored = context;
-    return 0;
+    return false;
 }
 
-fn cancel(context: *const c_uchar): c_int {
+fn cancel(context: usize): bool {
     const ignored = context;
-    return 1;
+    return true;
 }
 
 fn put16(bytes: []u8, at: usize, value: u16): void {
@@ -64,9 +64,9 @@ test "typed lossless DNG decoder returns unsigned sensor codes and checks bounds
     }
     var samples: [4]u16 = [0] ** 4;
     const source = bytes[0..235];
-    assert(dng_source.decode_lossless_bayer(source, samples[0..], 4, no_cancel, 0 as! *const c_uchar) == 0);
+    assert(dng_source.decode_lossless_bayer(source, samples[0..], 4, no_cancel, 0) == 0);
     assert(samples[0] == 128 and samples[1] == 128 and samples[2] == 128 and samples[3] == 128);
-    assert(dng_source.decode_lossless_bayer(source, samples[0..], 3, no_cancel, 0 as! *const c_uchar) == 3);
-    assert(dng_source.decode_lossless_bayer(source, samples[0..3], 4, no_cancel, 0 as! *const c_uchar) == 4);
-    assert(dng_source.decode_lossless_bayer(source, samples[0..], 4, cancel, 0 as! *const c_uchar) == 7);
+    assert(dng_source.decode_lossless_bayer(source, samples[0..], 3, no_cancel, 0) == 3);
+    assert(dng_source.decode_lossless_bayer(source, samples[0..3], 4, no_cancel, 0) == 4);
+    assert(dng_source.decode_lossless_bayer(source, samples[0..], 4, cancel, 0) == 7);
 }

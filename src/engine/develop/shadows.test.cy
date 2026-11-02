@@ -1,5 +1,12 @@
 import .engine.develop.shadows;
 
+fn no_cancel(context: usize): bool {
+    return false;
+}
+fn cancel(context: usize): bool {
+    return true;
+}
+
 test "shadow band has exact neutral and endpoint identities" {
     const neutral = shadows.apply(-0.2, 0.09, 1.4, 0.0);
     assert(neutral.red == -0.2 and neutral.green == 0.09 and neutral.blue == 1.4);
@@ -11,6 +18,52 @@ test "shadow band has exact neutral and endpoint identities" {
     assert(signed.red == -0.1);
     const headroom = shadows.apply(2.0, 2.0, 2.0, 1.0);
     assert(headroom.red == 2.0);
+}
+
+test "shadow image preserves signed and highlight samples across a strip" {
+    const input: [12]f32 = [-0.1, -0.1, -0.1,
+        0.09, 0.09, 0.09, 0.18, 0.18, 0.18,
+        2.0, 2.0, 2.0
+    ];
+    var output: [12]f32 = [9.0] ** 12;
+    const asset: shadows.ShadowsAsset = {
+        version: 1,
+        strength: 1.0
+    };
+    assert(shadows.apply_image(input[0..], 4, 1, asset,
+        output[0..], no_cancel, 0
+    ) == 0);
+    assert((output[0] as f64) > -0.10001 and (output[0] as f64) < -0.09999);
+    assert((output[3] as f64) > 0.13499 and (output[3] as f64) < 0.13501);
+    assert((output[6] as f64) > 0.17999 and (output[6] as f64) < 0.18001);
+    assert((output[9] as f64) > 1.99999 and (output[9] as f64) < 2.00001);
+}
+
+test "shadow image validates asset shape samples and cancellation" {
+    const input: [3]f32 = [0.09, 0.09, 0.09];
+    var output: [3]f32 = [9.0] ** 3;
+    const asset: shadows.ShadowsAsset = {
+        version: 1,
+        strength: 1.0
+    };
+    assert(shadows.apply_image(input[0..], 0, 1, asset,
+        output[0..], no_cancel, 0
+    ) == 2);
+    const bad: [3]f32 = [9.0, 0.09, 0.09];
+    assert(shadows.apply_image(bad[0..], 1, 1, asset,
+        output[0..], no_cancel, 0
+    ) == 3);
+    assert(shadows.apply_image(input[0..], 1, 1, asset,
+        output[0..], cancel, 0
+    ) == 7);
+    const invalid: shadows.ShadowsAsset = {
+        version: 1,
+        strength: 1.1
+    };
+    assert(shadows.apply_image(input[0..], 1, 1, invalid,
+        output[0..], no_cancel, 0
+    ) == 1);
+    assert(output[0] == 9.0);
 }
 
 test "shadow band is monotone on analytical greys and preserves chroma" {

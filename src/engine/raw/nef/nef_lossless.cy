@@ -5,7 +5,7 @@ import .engine.tiff.tiff;
 // Output is uncropped, unsigned sensor codes in row-major order. No color,
 // black-level, or camera-specific geometry is applied here.
 struct Bits {
-    input: *const c_uchar;
+    input: *const u8;
     length: usize;
     byte_position: usize;
     current: u32;
@@ -119,20 +119,20 @@ fn difference(bits: &Bits, size: i32): i32 {
     return value;
 }
 
-fn put(output: *c_ushort, index: usize, value: u16): void {
+fn put(output: *u16, index: usize, value: u16): void {
     unchecked {
         const address = (output as! usize) + index * 2;
-        *(address as! *c_ushort) = value as c_ushort;
+        *(address as! *u16) = value as u16;
     }
 }
 
-pub export c("lc_cyna_img_v1_decode_nef_lossless14") fn decode(
-    input: *const c_uchar, length: c_size_t,
-    width: c_size_t, height: c_size_t,
-    seed00: c_uint, seed01: c_uint, seed10: c_uint, seed11: c_uint,
-    output: *c_ushort, output_len: c_size_t,
-    cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar
-): c_int {
+pub fn decode(
+    input: *const u8, length: usize,
+    width: usize, height: usize,
+    seed00: u32, seed01: u32, seed10: u32, seed11: u32,
+    output: *u16, output_len: usize,
+    cancelled: fn (usize): bool, context: usize
+): i32 {
     const w = width as usize;
     const h = height as usize;
     const n = output_len as usize;
@@ -165,7 +165,7 @@ pub export c("lc_cyna_img_v1_decode_nef_lossless14") fn decode(
     var clipped: usize = 0;
     var y: usize = 0;
     while y < h {
-        if cancelled(cancel_context) != 0 {
+        if cancelled(context) {
             return 7;
         }
         var left0: i32 = 0;

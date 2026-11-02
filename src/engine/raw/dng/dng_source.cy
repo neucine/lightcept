@@ -1,3 +1,4 @@
+import { never_poll } from .engine.core.cancellation;
 import .engine.tiff.tiff;
 import .engine.raw.lossless_jpeg;
 
@@ -31,7 +32,7 @@ pub struct DngInfo {
     pub forward_matrix_offset: usize;
     pub neutral_offset: usize;
     pub color_supported: bool;
-    pub status: c_int;
+    pub status: i32;
 }
 
 pub struct LevelTriplet {
@@ -54,10 +55,10 @@ pub struct DngStorage {
     pub strip_bytes: u32;
     pub strip_count: u32;
     pub rows_per_strip: u32;
-    pub status: c_int;
+    pub status: i32;
 }
 
-fn storage_ifd(input: *const c_uchar, length: usize, offset: usize): DngStorage {
+fn storage_ifd(input: *const u8, length: usize, offset: usize): DngStorage {
     var result: DngStorage = {
         ifd_offset: offset,
         width: 0,
@@ -124,7 +125,7 @@ fn storage_ifd(input: *const c_uchar, length: usize, offset: usize): DngStorage 
     return result;
 }
 
-pub fn inspect_storage(input: *const c_uchar, length: usize): DngStorage {
+pub fn inspect_storage(input: *const u8, length: usize): DngStorage {
     var result: DngStorage = {
         ifd_offset: 0,
         width: 0,
@@ -203,15 +204,15 @@ pub fn inspect_storage(input: *const c_uchar, length: usize): DngStorage {
     return result;
 }
 
-export c("lc_cyna_img_v1_probe_dng_storage") fn probe_dng_storage(input: *const c_uchar, length: c_size_t, width: *c_uint, height: *c_uint, bits: *c_uint, compression: *c_uint, photometric: *c_uint): c_int {
+fn probe_dng_storage(input: *const u8, length: usize, width: *u32, height: *u32, bits: *u32, compression: *u32, photometric: *u32): i32 {
     const result = inspect_storage(input, length as usize);
     if result.status == 0 {
         unchecked {
-            *width = result.width as c_uint;
-            *height = result.height as c_uint;
-            *bits = result.bits as c_uint;
-            *compression = result.compression as c_uint;
-            *photometric = result.photometric as c_uint;
+            *width = result.width as u32;
+            *height = result.height as u32;
+            *bits = result.bits as u32;
+            *compression = result.compression as u32;
+            *photometric = result.photometric as u32;
         }
     }
     return result.status;
@@ -219,12 +220,7 @@ export c("lc_cyna_img_v1_probe_dng_storage") fn probe_dng_storage(input: *const 
 
 // Decode-only path. Sensor geometry, levels, demosaic, and color are separate
 // stages and do not become supported merely because this function succeeds.
-fn never_cancel(context: *const c_uchar): c_int {
-    const ignored = context;
-    return 0;
-}
-
-fn decode_dng_lossless_bayer(input: *const c_uchar, length: c_size_t, output: *c_ushort, output_len: c_size_t, max_pixels: c_size_t, cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar): c_int {
+fn decode_dng_lossless_bayer(input: *const u8, length: usize, output: *u16, output_len: usize, max_pixels: usize, cancelled: fn (usize): bool, context: usize): i32 {
     const layout = inspect_storage(input, length as usize);
     if layout.status != 0 {
         return layout.status;
@@ -241,32 +237,32 @@ fn decode_dng_lossless_bayer(input: *const c_uchar, length: c_size_t, output: *c
     if not tiff.has_range(length as usize, layout.strip_offset as usize, layout.strip_bytes as usize) {
         return 1;
     }
-    const strip = ((input as! usize) + layout.strip_offset as usize) as! *const c_uchar;
-    return lossless_jpeg.decode(strip, layout.strip_bytes as usize, output, output_len as usize, layout.width as usize, layout.height as usize, layout.bits, cancelled, cancel_context);
+    const strip = ((input as! usize) + layout.strip_offset as usize) as! *const u8;
+    return lossless_jpeg.decode(strip, layout.strip_bytes as usize, output, output_len as usize, layout.width as usize, layout.height as usize, layout.bits, cancelled, context);
 }
 
 // Decodes one lossless JPEG Bayer strip into caller-owned, row-major unsigned
 // sensor codes. No black subtraction, crop, or color transform is applied.
 // Status 7 means cancellation; discard output after any nonzero status.
-pub fn decode_lossless_bayer(source: []const u8, samples: []u16, max_pixels: usize, cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar): c_int {
+pub fn decode_lossless_bayer(source: []const u8, samples: []u16, max_pixels: usize, cancelled: fn (usize): bool, context: usize): i32 {
     if source.len() == 0 or samples.len() == 0 {
         return 4;
     }
-    return decode_dng_lossless_bayer(source.ptr as! *const c_uchar, source.len() as c_size_t,
-        samples.ptr as! *c_ushort, samples.len() as c_size_t, max_pixels as c_size_t,
-        cancelled, cancel_context
+    return decode_dng_lossless_bayer(source.ptr as! *const u8, source.len() as usize,
+        samples.ptr as! *u16, samples.len() as usize, max_pixels as usize,
+        cancelled, context
     );
 }
 
-export c("lc_cyna_img_v1_decode_dng_lossless_bayer") fn decode_dng_lossless_bayer_v1(input: *const c_uchar, length: c_size_t, output: *c_ushort, output_len: c_size_t, max_pixels: c_size_t): c_int {
-    return decode_dng_lossless_bayer(input, length, output, output_len, max_pixels, never_cancel, 0 as! *const c_uchar);
+fn decode_dng_lossless_bayer_v1(input: *const u8, length: usize, output: *u16, output_len: usize, max_pixels: usize): i32 {
+    return decode_dng_lossless_bayer(input, length, output, output_len, max_pixels, never_poll, 0);
 }
 
-export c("lc_cyna_img_v2_decode_dng_lossless_bayer") fn decode_dng_lossless_bayer_v2(input: *const c_uchar, length: c_size_t, output: *c_ushort, output_len: c_size_t, max_pixels: c_size_t, cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar): c_int {
-    return decode_dng_lossless_bayer(input, length, output, output_len, max_pixels, cancelled, cancel_context);
+fn decode_dng_lossless_bayer_v2(input: *const u8, length: usize, output: *u16, output_len: usize, max_pixels: usize, cancelled: fn (usize): bool, context: usize): i32 {
+    return decode_dng_lossless_bayer(input, length, output, output_len, max_pixels, cancelled, context);
 }
 
-fn level_triplet(input: *const c_uchar, length: usize, kind: u16, count: u32, offset: u32): LevelTriplet {
+fn level_triplet(input: *const u8, length: usize, kind: u16, count: u32, offset: u32): LevelTriplet {
     var levels: LevelTriplet = {
         red: 0,
         green: 0,
@@ -327,7 +323,7 @@ fn valid_bayer_pattern(pattern: u32): bool {
     return (a == 0 and b == 1 and c == 1 and d == 2) or (a == 2 and b == 1 and c == 1 and d == 0) or (a == 1 and b == 0 and c == 2 and d == 1) or (a == 1 and b == 2 and c == 0 and d == 1);
 }
 
-pub fn inspect(input: *const c_uchar, length: usize, max_pixels: usize): DngInfo {
+pub fn inspect(input: *const u8, length: usize, max_pixels: usize): DngInfo {
     var info: DngInfo = {
         width: 0,
         height: 0,
@@ -701,14 +697,14 @@ pub fn inspect(input: *const c_uchar, length: usize, max_pixels: usize): DngInfo
     return info;
 }
 
-fn strip_value(input: *const c_uchar, value: u32, count: usize, index: usize): u32 {
+fn strip_value(input: *const u8, value: u32, count: usize, index: usize): u32 {
     if count == 1 {
         return value;
     }
     return tiff.u32le(input, (value as usize) + index * 4);
 }
 
-pub fn sample_offset(input: *const c_uchar, info: DngInfo, index: usize): usize {
+pub fn sample_offset(input: *const u8, info: DngInfo, index: usize): usize {
     const pixel = index / info.samples_per_pixel;
     const row = pixel / info.width;
     const column = pixel % info.width;
@@ -722,7 +718,7 @@ pub fn mosaic_color(info: DngInfo, row: usize, column: usize): u32 {
     return pattern_color(info.cfa_pattern, (row % 2) * 2 + column % 2);
 }
 
-pub fn mosaic_sample(input: *const c_uchar, info: DngInfo, row: usize, column: usize): f64 {
+pub fn mosaic_sample(input: *const u8, info: DngInfo, row: usize, column: usize): f64 {
     const index = row * info.width + column;
     const raw = tiff.u16le(input, sample_offset(input, info, index)) as f64;
     var black = info.black_red;
@@ -743,14 +739,14 @@ pub fn has_render_profile(info: DngInfo): bool {
     return info.color_supported and info.forward_matrix_offset != 0 and info.neutral_offset != 0;
 }
 
-fn write_sample(output: *c_float, index: usize, value: c_float): void {
+fn write_sample(output: *f32, index: usize, value: f32): void {
     unchecked {
         const address = (output as! usize) + index * 4;
-        *(address as! *c_float) = value;
+        *(address as! *f32) = value;
     }
 }
 
-pub fn normalized_sample(input: *const c_uchar, info: DngInfo, index: usize): f64 {
+pub fn normalized_sample(input: *const u8, info: DngInfo, index: usize): f64 {
     const raw = tiff.u16le(input, sample_offset(input, info, index)) as f64;
     var black: u32 = info.black_red;
     var white: u32 = info.white_red;
@@ -769,35 +765,35 @@ pub fn normalized_sample(input: *const c_uchar, info: DngInfo, index: usize): f6
     return normalized;
 }
 
-export c("lc_cyna_img_v1_probe_linear_dng") fn probe(input: *const c_uchar, length: c_size_t, max_pixels: c_size_t, width: *c_uint, height: *c_uint): c_int {
+fn probe(input: *const u8, length: usize, max_pixels: usize, width: *u32, height: *u32): i32 {
     const info = inspect(input, length as usize, max_pixels as usize);
     if info.status == 0 and info.photometric != 34892 {
         return 2;
     }
     if info.status == 0 {
         unchecked {
-            *width = info.width as c_uint;
-            *height = info.height as c_uint;
+            *width = info.width as u32;
+            *height = info.height as u32;
         }
     }
     return info.status;
 }
 
-export c("lc_cyna_img_v1_probe_bayer_dng") fn probe_bayer(input: *const c_uchar, length: c_size_t, max_pixels: c_size_t, width: *c_uint, height: *c_uint): c_int {
+fn probe_bayer(input: *const u8, length: usize, max_pixels: usize, width: *u32, height: *u32): i32 {
     const info = inspect(input, length as usize, max_pixels as usize);
     if info.status == 0 and info.photometric != 32803 {
         return 2;
     }
     if info.status == 0 {
         unchecked {
-            *width = info.width as c_uint;
-            *height = info.height as c_uint;
+            *width = info.width as u32;
+            *height = info.height as u32;
         }
     }
     return info.status;
 }
 
-export c("lc_cyna_img_v1_decode_linear_dng") fn decode(input: *const c_uchar, length: c_size_t, output: *c_float, output_len: c_size_t, max_pixels: c_size_t): c_int {
+fn decode(input: *const u8, length: usize, output: *f32, output_len: usize, max_pixels: usize): i32 {
     const info = inspect(input, length as usize, max_pixels as usize);
     if info.status != 0 {
         return info.status;
@@ -826,7 +822,7 @@ export c("lc_cyna_img_v1_decode_linear_dng") fn decode(input: *const c_uchar, le
         if normalized > 1.0 {
             normalized = 1.0;
         }
-        write_sample(output, index, normalized as c_float);
+        write_sample(output, index, normalized as f32);
         index = index + 1;
     }
     return 0;

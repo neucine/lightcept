@@ -1,8 +1,8 @@
 import .engine.pipeline.spatial_camera_pipeline;
 
-fn no_cancel(context: *const c_uchar): c_int {
+fn no_cancel(context: usize): bool {
     const ignored = context;
-    return 0;
+    return false;
 }
 
 test "spatial camera stage sizes its pyramids and renders a neutral mosaic" {
@@ -23,11 +23,11 @@ test "spatial camera stage sizes its pyramids and renders a neutral mosaic" {
     var near: [4]u8 = [0] ** 4;
     var output: [64]u8 = [0] ** 64;
     const status = spatial_camera_pipeline.render(normalized[0..], 4, 4, cfa, matrix[0..], neutral, 0.0, 1,
-        camera[0..], band[0..], source[0..], rim[0..], lum[0..], touched[0..], near[0..], output[0..], 4, 4, no_cancel, 0 as! *const c_uchar
+        camera[0..], band[0..], source[0..], rim[0..], lum[0..], touched[0..], near[0..], output[0..], 4, 4, no_cancel, 0
     );
     assert(status == 0 and output[3] == 255 and output[63] == 255);
     assert(output[0] > 0 and output[0] < 255);
     assert(spatial_camera_pipeline.render(normalized[0..], 4, 4, cfa, matrix[0..], neutral, 0.0, 1,
-        camera[0..47], band[0..], source[0..], rim[0..], lum[0..], touched[0..], near[0..], output[0..], 4, 4, no_cancel, 0 as! *const c_uchar
+        camera[0..47], band[0..], source[0..], rim[0..], lum[0..], touched[0..], near[0..], output[0..], 4, 4, no_cancel, 0
     ) == 4);
 }

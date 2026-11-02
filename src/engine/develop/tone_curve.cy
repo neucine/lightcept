@@ -1,10 +1,13 @@
 import .engine.color.output_color;
+import .engine.core.core;
+import std.math;
 
 // Diagnostic luminance-only scene-linear tone curve asset v1. Nodes span
 // reference black to reference white in Rec.2020/D65 luminance. RGB receives
 // one equal offset, preserving absolute channel differences and signed values.
 pub const algorithm_version: u32 = 1;
 pub const maximum_nodes: usize = 32;
+pub const maximum_pixels: usize = 16777216;
 
 pub struct CurveNode {
     pub input: f64;
@@ -64,7 +67,7 @@ pub fn valid(asset: &const CurveAsset): bool {
     return true;
 }
 
-fn mapped_luminance(nodes: []CurveNode, luminance: f64): f64 {
+fn mapped_luminance(nodes: []const CurveNode, luminance: f64): f64 {
     var right: usize = 1;
     if luminance >= 1.0 {
         right = nodes.len() - 1;
@@ -89,8 +92,8 @@ fn failure(status: u32): CurveResult {
     };
 }
 
-pub fn apply(asset: CurveAsset, red: f64, green: f64, blue: f64): CurveResult {
-    if not valid(&asset) {
+fn apply_borrowed(asset: &const CurveAsset, red: f64, green: f64, blue: f64): CurveResult {
+    if not valid(asset) {
         return failure(1);
     }
     if not (finite(red) and finite(green) and finite(blue)) {
@@ -120,4 +123,80 @@ pub fn apply(asset: CurveAsset, red: f64, green: f64, blue: f64): CurveResult {
         return failure(3);
     }
     return result;
+}
+
+pub fn apply(asset: CurveAsset, red: f64, green: f64, blue: f64): CurveResult {
+    return apply_borrowed(&asset, red, green, blue);
+}
+
+// Immutable interleaved scene-linear Rec.2020/D65 f32 RGB in [-0.25,8],
+// disjoint output in [-64,64] linear reference-white units. The monotone
+// curve maps luminance with linear end extrapolation; equal RGB offsets
+// preserve absolute channel differences. Status 0 success, 1 asset,
+// 2 shape/limit, 3 input, 4 result, 7 cancellation. Two passes validate
+// before writes and poll each row. Nonzero invalidates all output.
+pub fn apply_image(input: []const f32, width: usize, height: usize,
+    asset: &const CurveAsset, output: []f32,
+    cancelled: fn (usize): bool, context: usize
+): u32 {
+    if not valid(asset) {
+        return 1;
+    }
+    if width == 0 or height == 0 or width > maximum_pixels
+    or height > maximum_pixels / width {
+        return 2;
+    }
+    const pixels = width * height;
+    if input.len() != pixels * 3 or output.len() != pixels * 3 {
+        return 2;
+    }
+    var pass: usize = 0;
+    while pass < 2 {
+        var row: usize = 0;
+        while row < height {
+            if cancelled(context) {
+                return 7;
+            }
+            var column: usize = 0;
+            while column < width {
+                const offset = (row * width + column) * 3;
+                var channel: usize = 0;
+                while channel < 3 {
+                    const value = input[offset + channel];
+                    if not core.finite_sample(value) or value < -0.25
+                    or value > 8.0 {
+                        return 3;
+                    }
+                    channel = channel + 1;
+                }
+                const result = apply_borrowed(asset, input[offset] as f64,
+                    input[offset + 1] as f64, input[offset + 2] as f64
+                );
+                if result.status != 0 {
+                    return 4;
+                }
+                const values: [3]f64 = [result.red, result.green, result.blue];
+                channel = 0;
+                while channel < 3 {
+                    const value = values[channel];
+                    if not (value >= -64.0 and value <= 64.0) {
+                        return 4;
+                    }
+                    if pass == 1 {
+                        const rounded = math.to_f32_rounded(value);
+                        if rounded is sample {
+                            output[offset + channel] = sample;
+                        } else {
+                            return 4;
+                        }
+                    }
+                    channel = channel + 1;
+                }
+                column = column + 1;
+            }
+            row = row + 1;
+        }
+        pass = pass + 1;
+    }
+    return 0;
 }

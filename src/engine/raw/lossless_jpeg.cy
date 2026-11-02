@@ -1,4 +1,4 @@
-import .engine.tiff.tiff;
+import .engine.core.byte_reader;
 
 // Bounded JPEG lossless-Huffman (SOF3) decoder for the currently observed DNG
 // strip layout. The accepted stream has 1 or 2 full-resolution components,
@@ -12,7 +12,7 @@ struct Huffman {
 }
 
 struct Bits {
-    input: *const c_uchar;
+    input: *const u8;
     position: usize;
     end: usize;
     current: u32;
@@ -20,8 +20,8 @@ struct Bits {
     valid: bool;
 }
 
-fn be16(input: *const c_uchar, offset: usize): usize {
-    return (tiff.byte(input, offset) as usize) * 256 + (tiff.byte(input, offset + 1) as usize);
+fn be16(input: *const u8, offset: usize): usize {
+    return (byte_reader.byte(input, offset) as usize) * 256 + (byte_reader.byte(input, offset + 1) as usize);
 }
 
 fn next_bit(bits: &Bits): i32 {
@@ -33,10 +33,10 @@ fn next_bit(bits: &Bits): i32 {
             bits.valid = false;
             return -1;
         }
-        const value = tiff.byte(bits.input, bits.position) as u32;
+        const value = byte_reader.byte(bits.input, bits.position) as u32;
         bits.position = bits.position + 1;
         if value == 255 {
-            if bits.position >= bits.end or tiff.byte(bits.input, bits.position) != 0 {
+            if bits.position >= bits.end or byte_reader.byte(bits.input, bits.position) != 0 {
                 bits.valid = false;
                 return -1;
             }
@@ -60,9 +60,9 @@ fn huffman_symbol(bits: &Bits, table: Huffman): i32 {
             return -1;
         }
         code = code * 2 + bit as u32;
-        const count = tiff.byte(bits.input, table.counts + size - 1) as u32;
+        const count = byte_reader.byte(bits.input, table.counts + size - 1) as u32;
         if code >= first and code - first < count {
-            return tiff.byte(bits.input, table.symbols + symbol + (code - first) as usize) as i32;
+            return byte_reader.byte(bits.input, table.symbols + symbol + (code - first) as usize) as i32;
         }
         symbol = symbol + count as usize;
         first = (first + count) * 2;
@@ -95,22 +95,22 @@ fn difference(bits: &Bits, category: i32): i32 {
     return value;
 }
 
-fn sample(output: *const c_ushort, index: usize): i32 {
+fn sample(output: *const u16, index: usize): i32 {
     unchecked {
         const address = (output as! usize) + index * 2;
-        return *(address as! *const c_ushort) as i32;
+        return *(address as! *const u16) as i32;
     }
 }
 
-fn put_sample(output: *c_ushort, index: usize, value: i32): void {
+fn put_sample(output: *u16, index: usize, value: i32): void {
     unchecked {
         const address = (output as! usize) + index * 2;
-        *(address as! *c_ushort) = value as c_ushort;
+        *(address as! *u16) = value as u16;
     }
 }
 
-pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_len: usize, expected_width: usize, expected_height: usize, expected_bits: u32, cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar): c_int {
-    if not tiff.has_range(length, 0, 4) or tiff.byte(input, 0) != 255 or tiff.byte(input, 1) != 216 {
+pub fn decode(input: *const u8, length: usize, output: *u16, output_len: usize, expected_width: usize, expected_height: usize, expected_bits: u32, cancelled: fn (usize): bool, context: usize): i32 {
+    if not byte_reader.has_range(length, 0, 4) or byte_reader.byte(input, 0) != 255 or byte_reader.byte(input, 1) != 216 {
         return 1;
     }
     var position: usize = 2;
@@ -128,15 +128,15 @@ pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_le
     };
     var scan = false;
     while not scan {
-        if not tiff.has_range(length, position, 4) or tiff.byte(input, position) != 255 {
+        if not byte_reader.has_range(length, position, 4) or byte_reader.byte(input, position) != 255 {
             return 1;
         }
-        const marker = tiff.byte(input, position + 1);
+        const marker = byte_reader.byte(input, position + 1);
         if marker == 255 or marker == 0 or marker == 216 or marker == 217 {
             return 2;
         }
         const segment = be16(input, position + 2);
-        if segment < 2 or not tiff.has_range(length, position + 2, segment) {
+        if segment < 2 or not byte_reader.has_range(length, position + 2, segment) {
             return 1;
         }
         const data = position + 4;
@@ -145,33 +145,33 @@ pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_le
             if frame_seen or data_size < 9 {
                 return 2;
             }
-            precision = tiff.byte(input, data) as u32;
+            precision = byte_reader.byte(input, data) as u32;
             jpeg_height = be16(input, data + 1);
             jpeg_width = be16(input, data + 3);
-            components = tiff.byte(input, data + 5) as usize;
+            components = byte_reader.byte(input, data + 5) as usize;
             if (components != 1 and components != 2) or data_size != 6 + components * 3 or precision < 2 or precision > 16 {
                 return 2;
             }
-            first_id = tiff.byte(input, data + 6);
-            if tiff.byte(input, data + 7) != 17 or tiff.byte(input, data + 8) != 0 {
+            first_id = byte_reader.byte(input, data + 6);
+            if byte_reader.byte(input, data + 7) != 17 or byte_reader.byte(input, data + 8) != 0 {
                 return 2;
             }
             if components == 2 {
-                second_id = tiff.byte(input, data + 9);
-                if first_id == second_id or tiff.byte(input, data + 10) != 17 or tiff.byte(input, data + 11) != 0 {
+                second_id = byte_reader.byte(input, data + 9);
+                if first_id == second_id or byte_reader.byte(input, data + 10) != 17 or byte_reader.byte(input, data + 11) != 0 {
                     return 2;
                 }
             }
             frame_seen = true;
         } else if marker == 196 {
-            if table.valid or data_size < 17 or tiff.byte(input, data) != 0 {
+            if table.valid or data_size < 17 or byte_reader.byte(input, data) != 0 {
                 return 2;
             }
             var count: usize = 0;
             var available: i32 = 1;
             var index: usize = 0;
             while index < 16 {
-                const level_count = tiff.byte(input, data + 1 + index) as usize;
+                const level_count = byte_reader.byte(input, data + 1 + index) as usize;
                 count = count + level_count;
                 available = available * 2 - level_count as i32;
                 if available < 0 {
@@ -188,17 +188,17 @@ pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_le
                 valid: true
             };
         } else if marker == 218 {
-            if not frame_seen or not table.valid or data_size != 4 + components * 2 or tiff.byte(input, data) as usize != components {
+            if not frame_seen or not table.valid or data_size != 4 + components * 2 or byte_reader.byte(input, data) as usize != components {
                 return 2;
             }
-            if tiff.byte(input, data + 1) != first_id or tiff.byte(input, data + 2) != 0 {
+            if byte_reader.byte(input, data + 1) != first_id or byte_reader.byte(input, data + 2) != 0 {
                 return 2;
             }
-            if components == 2 and (tiff.byte(input, data + 3) != second_id or tiff.byte(input, data + 4) != 0) {
+            if components == 2 and (byte_reader.byte(input, data + 3) != second_id or byte_reader.byte(input, data + 4) != 0) {
                 return 2;
             }
             const controls = data + 1 + components * 2;
-            if tiff.byte(input, controls) != 1 or tiff.byte(input, controls + 1) != 0 or tiff.byte(input, controls + 2) != 0 {
+            if byte_reader.byte(input, controls) != 1 or byte_reader.byte(input, controls + 1) != 0 or byte_reader.byte(input, controls + 2) != 0 {
                 return 2;
             }
             scan = true;
@@ -224,7 +224,7 @@ pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_le
     const maximum = ((1 as i32) << precision) - 1;
     var row: usize = 0;
     while row < jpeg_height {
-        if cancelled(cancel_context) != 0 {
+        if cancelled(context) {
             return 7;
         }
         var column: usize = 0;
@@ -257,7 +257,7 @@ pub fn decode(input: *const c_uchar, length: usize, output: *c_ushort, output_le
         }
         row = row + 1;
     }
-    if not tiff.has_range(length, bits.position, 2) or bits.position + 2 != length or tiff.byte(input, bits.position) != 255 or tiff.byte(input, bits.position + 1) != 217 {
+    if not byte_reader.has_range(length, bits.position, 2) or bits.position + 2 != length or byte_reader.byte(input, bits.position) != 255 or byte_reader.byte(input, bits.position + 1) != 217 {
         return 1;
     }
     return 0;

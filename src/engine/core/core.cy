@@ -1,6 +1,6 @@
-// Interleaved, signed scene-linear Rec.2020/D65 RGB; three c_float samples per pixel.
+// Interleaved, signed scene-linear Rec.2020/D65 RGB; three f32 samples per pixel.
 // The caller owns storage. Dimensions and lengths are checked before any access.
-pub fn validate_image(width: usize, height: usize, max_pixels: usize, input_len: usize, output_len: usize): c_int {
+pub fn validate_image(width: usize, height: usize, max_pixels: usize, input_len: usize, output_len: usize): i32 {
     if width == 0 or height == 0 {
         return 1;
     }
@@ -17,7 +17,7 @@ pub fn validate_image(width: usize, height: usize, max_pixels: usize, input_len:
     return 0;
 }
 
-pub fn validate_rgb16_image(width: usize, height: usize, max_pixels: usize, input_len: usize, output_len: usize): c_int {
+pub fn validate_rgb16_image(width: usize, height: usize, max_pixels: usize, input_len: usize, output_len: usize): i32 {
     if width == 0 or height == 0 {
         return 1;
     }
@@ -34,7 +34,7 @@ pub fn validate_rgb16_image(width: usize, height: usize, max_pixels: usize, inpu
     return 0;
 }
 
-pub fn finite_sample(value: c_float): bool {
+pub fn finite_sample(value: f32): bool {
     if value != value {
         return false;
     }

@@ -1,8 +1,9 @@
 import .engine.raw.camera_mosaic;
 import .engine.raw.dng.dng_source;
-import .engine.raw.dng.sensor_geometry;
-import .engine.color.dng_color;
-import .engine.color.color_matrix;
+import .engine.raw.dng.dng_sensor_geometry;
+import .engine.color.dng.dng_color;
+import .engine.raw.dng.dng_profile;
+import .engine.color.dng.dng_color_matrix;
 import .engine.raw.dng.dng_exposure;
 import .engine.raw.dng.dng_orientation;
 
@@ -14,7 +15,7 @@ pub struct DngMosaicSize {
     pub crop_pixels: usize;
     pub crop_width: usize;
     pub crop_height: usize;
-    pub status: c_int;
+    pub status: i32;
 }
 
 // Resource contract for caller-owned scratch. A successful result describes
@@ -30,7 +31,7 @@ pub fn inspect(source: []const u8, max_pixels: usize): DngMosaicSize {
     if source.len() < 8 or source.len() > 512 * 1024 * 1024 {
         return result;
     }
-    const storage = dng_source.inspect_storage(source.ptr as! *const c_uchar, source.len());
+    const storage = dng_source.inspect_storage(source.ptr as! *const u8, source.len());
     if storage.status != 0 {
         result.status = storage.status;
         return result;
@@ -43,7 +44,7 @@ pub fn inspect(source: []const u8, max_pixels: usize): DngMosaicSize {
         result.status = 3;
         return result;
     }
-    const geometry = sensor_geometry.inspect(source.ptr as! *const c_uchar, source.len());
+    const geometry = dng_sensor_geometry.inspect(source.ptr as! *const u8, source.len());
     if geometry.status != 0 {
         result.status = geometry.status;
         return result;
@@ -68,7 +69,7 @@ pub fn inspect(source: []const u8, max_pixels: usize): DngMosaicSize {
 // headroom for the spatial correction route. Both use the same source probe.
 pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
     max_pixels: usize, normalization_version: u32,
-    cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar
+    cancelled: fn (usize): bool, context: usize
 ): camera_mosaic.CameraMosaic {
     const size = inspect(source, max_pixels);
     if size.status != 0 {
@@ -80,33 +81,33 @@ pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
     if normalization_version != 2 and normalization_version != 3 {
         return camera_mosaic.failed(4);
     }
-    const source_ptr = source.ptr as! *const c_uchar;
+    const source_ptr = source.ptr as! *const u8;
     var geometry: [16]u32 = [0] ** 16;
     var profile: [23]f64 = [0.0] ** 23;
     var matrix: [13]f64 = [0.0] ** 13;
     var exposure: [3]f64 = [0.0] ** 3;
     var orientation: [1]u32 = [0];
-    var status = sensor_geometry.probe(source_ptr, source.len() as c_size_t, geometry[0..].ptr as! *c_uint, 16);
+    var status = dng_sensor_geometry.probe(source_ptr, source.len() as usize, geometry[0..].ptr as! *u32, 16);
     if status != 0 {
         return camera_mosaic.failed(status);
     }
-    status = dng_color.probe_color_matrices(source_ptr, source.len() as c_size_t, profile[0..].ptr as! *c_double, 23);
+    status = dng_profile.probe_color_matrices(source_ptr, source.len() as usize, profile[0..].ptr as! *f64, 23);
     if status != 0 {
         return camera_mosaic.failed(status);
     }
-    status = color_matrix.derive(profile[0..].ptr as! *const c_double, 23, matrix[0..].ptr as! *c_double, 13);
+    status = dng_color_matrix.derive(profile[0..].ptr as! *const f64, 23, matrix[0..].ptr as! *f64, 13);
     if status != 0 {
         return camera_mosaic.failed(status);
     }
-    status = dng_exposure.probe(source_ptr, source.len() as c_size_t, exposure[0..].ptr as! *c_double, 3);
+    status = dng_exposure.probe(source_ptr, source.len() as usize, exposure[0..].ptr as! *f64, 3);
     if status != 0 {
         return camera_mosaic.failed(status);
     }
-    status = dng_orientation.probe(source_ptr, source.len() as c_size_t, orientation[0..].ptr as! *c_uint, 1);
+    status = dng_orientation.probe(source_ptr, source.len() as usize, orientation[0..].ptr as! *u32, 1);
     if status != 0 {
         return camera_mosaic.failed(status);
     }
-    if cancelled(context) != 0 {
+    if cancelled(context) {
         return camera_mosaic.failed(7);
     }
     status = dng_source.decode_lossless_bayer(source, samples, max_pixels, cancelled, context);
@@ -114,9 +115,9 @@ pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
         return camera_mosaic.failed(status);
     }
     if normalization_version == 2 {
-        status = sensor_geometry.normalize_v2(source_ptr, source.len() as c_size_t, samples.ptr as! *const c_ushort, samples.len() as c_size_t, normalized.ptr as! *c_float, normalized.len() as c_size_t, cancelled, context);
+        status = dng_sensor_geometry.normalize_v2(source_ptr, source.len() as usize, samples.ptr as! *const u16, samples.len() as usize, normalized.ptr as! *f32, normalized.len() as usize, cancelled, context);
     } else {
-        status = sensor_geometry.normalize_v3(source_ptr, source.len() as c_size_t, samples.ptr as! *const c_ushort, samples.len() as c_size_t, normalized.ptr as! *c_float, normalized.len() as c_size_t, cancelled, context);
+        status = dng_sensor_geometry.normalize_v3(source_ptr, source.len() as usize, samples.ptr as! *const u16, samples.len() as usize, normalized.ptr as! *f32, normalized.len() as usize, cancelled, context);
     }
     if status != 0 {
         return camera_mosaic.failed(status);

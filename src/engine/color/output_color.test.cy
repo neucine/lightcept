@@ -1,14 +1,14 @@
 import .engine.color.output_color;
 
 test "split output operations reproduce accepted fused encoder" {
-    var levels: [:]c_double = [-0.25, 0.0, 0.0031308, 0.18, 0.5, 1.0, 1.5];
+    var levels: [:]f64 = [-0.25, 0.0, 0.0031308, 0.18, 0.5, 1.0, 1.5];
     var i: usize = 0;
     while i < 7 {
         var j: usize = 0;
         while j < 7 {
             var k: usize = 0;
             while k < 7 {
-                var channel: c_int = 0;
+                var channel: i32 = 0;
                 while channel < 3 {
                     const fused = output_color.encode_channel(levels[i], levels[j], levels[k], channel);
                     const split = output_color.encode_channel_split(levels[i], levels[j], levels[k], channel);

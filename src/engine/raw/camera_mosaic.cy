@@ -14,10 +14,10 @@ pub struct CameraMosaic {
     pub neutral: [3]f64;
     pub baseline_exposure_ev: f64;
     pub orientation: u32;
-    pub status: c_int;
+    pub status: i32;
 }
 
-pub fn failed(status: c_int): CameraMosaic {
+pub fn failed(status: i32): CameraMosaic {
     return {
         width: 0,
         height: 0,

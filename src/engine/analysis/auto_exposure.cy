@@ -1,6 +1,6 @@
 import .engine.develop.edit_plan;
 
-extern c("log2") fn log2(value: c_double): c_double;
+import std.math;
 
 // Diagnostic analysis v1 of the 258-bin signed scene-linear Rec.2020
 // histogram. This proposes one exposure edit; it never mutates a plan.
@@ -39,7 +39,7 @@ fn failure(status: u32): Proposal {
 }
 
 fn exposure_for(target: f64, observed: f64): f64 {
-    return log2((target / observed) as c_double) as f64;
+    return math.log2_f64((target / observed) as f64) as f64;
 }
 
 // Percentile is in basis points, 0..10000. Target is linear reference-white

@@ -2,13 +2,13 @@
 //
 // Cyna owns this table: every control name a recipe may carry, the family it belongs to, the
 // units its number is in, the value that leaves the image unchanged, the scopes it admits, and
-// the value range each scope and mode accepts. The Rust host decodes the report and formats
-// messages; it never writes a control id, a bound, a neutral value, or a scope.
+// the value range each scope and mode accepts. A product caller may format
+// messages; Cyna owns every control id, bound, neutral value, and scope.
 //
 // A control-contract revision is reproducible only while this table still carries that revision's
 // exact bounds. A future revision that changes a range adds its own rows so projects pinned to an
 // older revision keep replaying.
-import .engine.pipeline.stage_manifest;
+import .engine.pipeline.develop_stage_manifest;
 
 const control_contract_version: u32 = 2;
 const control_name_bytes: usize = 24;
@@ -227,7 +227,7 @@ pub fn control_contract(revision: u32): [:]ControlContractEntry {
     return placeholder_contract();
 }
 
-// One blank row stands for "no contract at this revision". The ABI rejects an unknown revision
+// One blank row stands for "no contract at this revision". The query rejects an unknown revision
 // before a host reads it, so this only keeps the descriptor writer total.
 fn placeholder_contract(): [:]ControlContractEntry {
     return [control("", "", 0, "", 0.0, 0, unused_domain(), unused_domain(), unused_domain(), unused_domain())];
@@ -260,7 +260,7 @@ fn control_row_position(revision: u32, name: string): usize {
 
 // A borrowed control name arrives as C bytes. Comparing it byte by byte keeps the decision in
 // Cyna without copying the name into a dynamic string.
-fn name_is_named(name: *const c_uchar, name_len: usize, candidate: string): bool {
+fn name_is_named(name: *const u8, name_len: usize, candidate: string): bool {
     const bytes: []const u8 = candidate.bytes();
     if bytes.len() != name_len {
         return false;
@@ -269,7 +269,7 @@ fn name_is_named(name: *const c_uchar, name_len: usize, candidate: string): bool
     while index < name_len {
         var byte: u32 = 0;
         unchecked {
-            byte = *(((name as! usize) + index) as! *const c_uchar) as u32;
+            byte = *(((name as! usize) + index) as! *const u8) as u32;
         }
         if byte != bytes[index] as u32 {
             return false;
@@ -280,7 +280,7 @@ fn name_is_named(name: *const c_uchar, name_len: usize, candidate: string): bool
 }
 
 fn is_declared_stage(name: string): bool {
-    const stages = stage_manifest.declared_stages();
+    const stages = develop_stage_manifest.declared_stages();
     var index: usize = 0;
     while index < stages.len() {
         if stages[index].name == name {
@@ -292,7 +292,7 @@ fn is_declared_stage(name: string): bool {
 }
 
 // The decision for one located control row. Scope and mode are resolved here so both the typed
-// caller and the ABI transport reach the same answer.
+// caller and the serialized transport reach the same answer.
 fn decide_control(entry: ControlContractEntry, mode: u32, value: f64, local: bool): u32 {
     var scope: u32 = scope_global;
     if local {
@@ -367,7 +367,7 @@ fn drives_control(driven: string, control: string): bool {
 // a semantic promise, not a capability this engine can run yet.
 pub fn control_execution(name: string, has_camera_matrix: bool, editable_white_balance: bool): u32 {
     var bits: u32 = 0;
-    const composed = stage_manifest.composed_stages(has_camera_matrix, editable_white_balance);
+    const composed = develop_stage_manifest.composed_stages(has_camera_matrix, editable_white_balance);
     var index: usize = 0;
     while index < composed.len() {
         const stage = composed[index];
@@ -397,7 +397,7 @@ fn write_padded(base: usize, offset: usize, text: string, width: usize): void {
             byte = bytes[position];
         }
         unchecked {
-            *((base + offset + position) as! *c_uchar) = byte as c_uchar;
+            *((base + offset + position) as! *u8) = byte as u8;
         }
         position = position + 1;
     }
@@ -405,13 +405,13 @@ fn write_padded(base: usize, offset: usize, text: string, width: usize): void {
 
 fn write_number(base: usize, offset: usize, value: u32): void {
     unchecked {
-        *((base + offset) as! *c_uint) = value as c_uint;
+        *((base + offset) as! *u32) = value as u32;
     }
 }
 
 fn write_double(base: usize, offset: usize, value: f64): void {
     unchecked {
-        *((base + offset) as! *c_double) = value as c_double;
+        *((base + offset) as! *f64) = value as f64;
     }
 }
 
@@ -465,7 +465,7 @@ fn write_descriptor(base: usize, index: usize, entry: ControlContractEntry): voi
     var trailing: usize = 240;
     while trailing < control_descriptor_bytes {
         unchecked {
-            *((slot + trailing) as! *c_uchar) = 0;
+            *((slot + trailing) as! *u8) = 0;
         }
         trailing = trailing + 1;
     }
@@ -474,19 +474,19 @@ fn write_descriptor(base: usize, index: usize, entry: ControlContractEntry): voi
 // Report the control contract for one revision. Status: 0 success, 2 limit, 3 shape,
 // 4 revision this build cannot reproduce. `revisions` receives the revisions this build can
 // replay, in ascending order, and `reproducible_count` says how many of them were written.
-export c("lc_cyna_img_v1_describe_control_contract") fn describe_control_contract(
-    revision: c_int,
-    controls: *c_uchar,
-    controls_len: c_size_t,
-    control_count: *c_uint,
-    control_count_len: c_size_t,
-    contract_version: *c_uint,
-    contract_version_len: c_size_t,
-    revisions: *c_uint,
-    revisions_len: c_size_t,
-    reproducible_count: *c_uint,
-    reproducible_count_len: c_size_t
-): c_int {
+fn describe_control_contract(
+    revision: i32,
+    controls: *u8,
+    controls_len: usize,
+    control_count: *u32,
+    control_count_len: usize,
+    contract_version: *u32,
+    contract_version_len: usize,
+    revisions: *u32,
+    revisions_len: usize,
+    reproducible_count: *u32,
+    reproducible_count_len: usize
+): i32 {
     if controls_len as usize != max_declared_controls * control_descriptor_bytes
     or control_count_len as usize != 1
     or contract_version_len as usize != 1
@@ -519,19 +519,19 @@ export c("lc_cyna_img_v1_describe_control_contract") fn describe_control_contrac
     while revision_index < max_reproducible_revisions {
         if revision_index < revisions_to_write.len() {
             unchecked {
-                *(((revisions as! usize) + revision_index * 4) as! *c_uint) = revisions_to_write[revision_index] as c_uint;
+                *(((revisions as! usize) + revision_index * 4) as! *u32) = revisions_to_write[revision_index] as u32;
             }
         } else {
             unchecked {
-                *(((revisions as! usize) + revision_index * 4) as! *c_uint) = 0;
+                *(((revisions as! usize) + revision_index * 4) as! *u32) = 0;
             }
         }
         revision_index = revision_index + 1;
     }
     unchecked {
-        *(control_count as! *c_uint) = rows.len() as c_uint;
-        *(contract_version as! *c_uint) = control_contract_version as c_uint;
-        *(reproducible_count as! *c_uint) = revisions_to_write.len() as c_uint;
+        *(control_count as! *u32) = rows.len() as u32;
+        *(contract_version as! *u32) = control_contract_version as u32;
+        *(reproducible_count as! *u32) = revisions_to_write.len() as u32;
     }
     return 0;
 }
@@ -539,7 +539,7 @@ export c("lc_cyna_img_v1_describe_control_contract") fn describe_control_contrac
 // Resolve one control named in borrowed C bytes against a pinned contract revision. The status is
 // one of the edit codes above; `domain_index`, `min`, and `max` describe the value range the scope
 // and mode resolved to. Hosts quote bounds from this report, never from a table of their own.
-pub fn control_admission(name: *const c_uchar, name_len: usize, local: bool, mode: u32, value: f64, revision: u32): ControlAdmission {
+pub fn control_admission(name: *const u8, name_len: usize, local: bool, mode: u32, value: f64, revision: u32): ControlAdmission {
     if value - value != 0.0 {
         return {
             found: false,
@@ -631,42 +631,42 @@ fn admit_domain(entry: ControlContractEntry, local: bool, mode: u32, value: f64)
 
 // Decide whether one adjustment is admissible under a pinned contract revision. Status codes are
 // the edit-validation codes above.
-export c("lc_cyna_img_v1_validate_develop_edit") fn validate_develop_edit(
-    control_name: *const c_uchar,
-    control_name_len: c_size_t,
-    mode: c_uint,
-    value: c_double,
-    local: c_int,
-    revision: c_int
-): c_int {
+fn validate_develop_edit(
+    control_name: *const u8,
+    control_name_len: usize,
+    mode: u32,
+    value: f64,
+    local: i32,
+    revision: i32
+): i32 {
     const name_len = control_name_len as usize;
     if name_len == 0 or name_len > control_name_bytes {
-        return edit_transport as c_int;
+        return edit_transport as i32;
     }
     const wanted = revision as u32;
     if not control_is_reproducible(wanted) {
-        return edit_revision_unreproducible as c_int;
+        return edit_revision_unreproducible as i32;
     }
     if value - value != 0.0 {
-        return edit_non_finite as c_int;
+        return edit_non_finite as i32;
     }
     const rows = control_contract(wanted);
     var index: usize = 0;
     while index < rows.len() {
         if name_is_named(control_name, name_len, rows[index].name) {
-            return decide_control(rows[index], mode as u32, value as f64, local != 0) as c_int;
+            return decide_control(rows[index], mode as u32, value as f64, local != 0) as i32;
         }
         index = index + 1;
     }
     var stage: usize = 0;
-    const stages = stage_manifest.declared_stages();
+    const stages = develop_stage_manifest.declared_stages();
     while stage < stages.len() {
         if name_is_named(control_name, name_len, stages[stage].name) {
-            return edit_declared_stage as c_int;
+            return edit_declared_stage as i32;
         }
         stage = stage + 1;
     }
-    return edit_unknown_control as c_int;
+    return edit_unknown_control as i32;
 }
 
 // Report, for every control row of the current contract, how far this build executes it. The
@@ -674,12 +674,12 @@ export c("lc_cyna_img_v1_validate_develop_edit") fn validate_develop_edit(
 // Each slot is one control's bitset: 1 a composed stage drives it, 2 that stage takes develop-edit
 // values, 4 it accepts a delta, 8 it accepts a target. Slots past the declared rows are zero.
 // Status: 0 success, 2 limit, 3 shape.
-export c("lc_cyna_img_v1_describe_control_execution") fn describe_control_execution(
-    has_camera_matrix: c_int,
-    editable_white_balance: c_int,
-    controls: *c_uint,
-    controls_len: c_size_t
-): c_int {
+fn describe_control_execution(
+    has_camera_matrix: i32,
+    editable_white_balance: i32,
+    controls: *u32,
+    controls_len: usize
+): i32 {
     if controls_len as usize != max_declared_controls {
         return 3;
     }
@@ -694,7 +694,7 @@ export c("lc_cyna_img_v1_describe_control_execution") fn describe_control_execut
             bits = control_execution(rows[index].name, has_camera_matrix != 0, editable_white_balance != 0);
         }
         unchecked {
-            *(((controls as! usize) + index * 4) as! *c_uint) = bits as c_uint;
+            *(((controls as! usize) + index * 4) as! *u32) = bits as u32;
         }
         index = index + 1;
     }

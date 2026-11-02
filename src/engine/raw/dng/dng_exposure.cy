@@ -3,7 +3,7 @@ import .engine.tiff.tiff;
 // DNG default exposure metadata. BaselineExposure is SRATIONAL, while
 // BaselineExposureOffset is RATIONAL. Both are EV adjustments in root IFD.
 // This product includes DNG technology under license by Adobe.
-pub export c("lc_cyna_img_v1_probe_dng_default_exposure") fn probe(input: *const c_uchar, length: c_size_t, output: *c_double, output_len: c_size_t): c_int {
+pub fn probe(input: *const u8, length: usize, output: *f64, output_len: usize): i32 {
     const size = length as usize;
     if not tiff.has_range(size, 0, 8) {
         return 1;
@@ -75,8 +75,8 @@ pub export c("lc_cyna_img_v1_probe_dng_default_exposure") fn probe(input: *const
     return 0;
 }
 
-fn write_double(output: *c_double, index: usize, value: f64): void {
+fn write_double(output: *f64, index: usize, value: f64): void {
     unchecked {
-        *(((output as! usize) + index * 8) as! *c_double) = value as c_double;
+        *(((output as! usize) + index * 8) as! *f64) = value as f64;
     }
 }

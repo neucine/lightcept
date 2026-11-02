@@ -69,7 +69,7 @@ test "logical edit compilation resolves target and delta without pixel buffers" 
     assert(result.plan.linear_chroma == 1.25);
     assert(result.plan.vibrance_strength == 0.4);
     const pixel = black_point.apply(0.2, 0.2, 0.2, result.plan.black_offset);
-    const toned = contrast.apply(pixel.red as c_double, pixel.green as c_double, pixel.blue as c_double, result.plan.contrast_slope as c_double);
+    const toned = contrast.apply(pixel.red as f64, pixel.green as f64, pixel.blue as f64, result.plan.contrast_slope as f64);
     assert(toned.red == toned.green and toned.green == toned.blue);
 }
 

@@ -3,7 +3,7 @@ import .engine.tiff.tiff;
 // TIFF Orientation belongs to the root IFD for this bounded Classic TIFF DNG
 // path. Missing tag has TIFF's default value 1. Values outside 1..8 and
 // duplicate or malformed tags are not accepted as renderable orientation.
-pub export c("lc_cyna_img_v1_probe_dng_orientation") fn probe(input: *const c_uchar, length: c_size_t, output: *c_uint, output_len: c_size_t): c_int {
+pub fn probe(input: *const u8, length: usize, output: *u32, output_len: usize): i32 {
     const size = length as usize;
     if output_len as usize != 1 or not tiff.has_range(size, 0, 8) {
         return 4;
@@ -37,7 +37,7 @@ pub export c("lc_cyna_img_v1_probe_dng_orientation") fn probe(input: *const c_uc
         index = index + 1;
     }
     unchecked {
-        *output = orientation as c_uint;
+        *output = orientation as u32;
     }
     return 0;
 }

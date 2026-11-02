@@ -9,7 +9,7 @@
 pub struct Layout {
     pub pixel_offset: usize;
     pub total_bytes: usize;
-    pub status: c_int;
+    pub status: i32;
 }
 
 pub fn layout(width: usize, height: usize, icc_length: usize): Layout {
@@ -66,8 +66,8 @@ fn tag(output: []u8, index: usize, id: u16, kind: u16, count: u32, value: u32): 
 // Header length is layout.pixel_offset; each subsequent row is width * 6 bytes.
 // A caller can write these buffers in order without allocating total_bytes.
 pub fn encode_header(width: usize, height: usize, icc: []const u8, output: []u8,
-    cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar
-): c_int {
+    cancelled: fn (usize): bool, context: usize
+): i32 {
     const plan = layout(width, height, icc.len());
     if plan.status != 0 {
         return plan.status;
@@ -78,7 +78,7 @@ pub fn encode_header(width: usize, height: usize, icc: []const u8, output: []u8,
     if icc[36] != 97 or icc[37] != 99 or icc[38] != 115 or icc[39] != 112 {
         return 2;
     }
-    if cancelled(context) != 0 {
+    if cancelled(context) {
         return 7;
     }
     output[0] = 73;
@@ -115,12 +115,12 @@ pub fn encode_header(width: usize, height: usize, icc: []const u8, output: []u8,
 
 // Input is one interleaved RGB16 row. Output is exactly width * 6 bytes.
 pub fn encode_row(rgb: []const u16, width: usize, output: []u8,
-    cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar
-): c_int {
+    cancelled: fn (usize): bool, context: usize
+): i32 {
     if width == 0 or width > 10000 or rgb.len() != width * 3 or output.len() != width * 6 {
         return 4;
     }
-    if cancelled(context) != 0 {
+    if cancelled(context) {
         return 7;
     }
     var channel: usize = 0;
@@ -133,8 +133,8 @@ pub fn encode_row(rgb: []const u16, width: usize, output: []u8,
 
 pub fn encode(rgb: []const u16, width: usize, height: usize,
     icc: []const u8, output: []u8,
-    cancelled: c fn (*const c_uchar): c_int, context: *const c_uchar
-): c_int {
+    cancelled: fn (usize): bool, context: usize
+): i32 {
     const plan = layout(width, height, icc.len());
     if plan.status != 0 {
         return plan.status;

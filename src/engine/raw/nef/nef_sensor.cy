@@ -22,28 +22,28 @@ pub fn cropped_cfa(stored: u32, left: u32, top: u32): u32 {
     return shifted;
 }
 
-fn sample(input: *const c_ushort, index: usize): u32 {
+fn sample(input: *const u16, index: usize): u32 {
     unchecked {
-        return *(((input as! usize) + index * 2) as! *const c_ushort) as u32;
+        return *(((input as! usize) + index * 2) as! *const u16) as u32;
     }
 }
 
-fn write(output: *c_float, index: usize, value: f32): void {
+fn write(output: *f32, index: usize, value: f32): void {
     unchecked {
-        *(((output as! usize) + index * 4) as! *c_float) = value as c_float;
+        *(((output as! usize) + index * 4) as! *f32) = value as f32;
     }
 }
 
-pub export c("lc_cyna_img_v1_normalize_nef_sensor") fn normalize(
-    input: *const c_ushort, input_len: c_size_t,
-    stored_width: c_size_t, stored_height: c_size_t,
-    crop_left: c_size_t, crop_top: c_size_t,
-    crop_width: c_size_t, crop_height: c_size_t,
-    black00: c_uint, black01: c_uint, black10: c_uint, black11: c_uint,
-    white: c_uint,
-    output: *c_float, output_len: c_size_t,
-    cancelled: c fn (*const c_uchar): c_int, cancel_context: *const c_uchar
-): c_int {
+pub fn normalize(
+    input: *const u16, input_len: usize,
+    stored_width: usize, stored_height: usize,
+    crop_left: usize, crop_top: usize,
+    crop_width: usize, crop_height: usize,
+    black00: u32, black01: u32, black10: u32, black11: u32,
+    white: u32,
+    output: *f32, output_len: usize,
+    cancelled: fn (usize): bool, context: usize
+): i32 {
     if (input as! usize) == 0 or (output as! usize) == 0 {
         return 4;
     }
@@ -68,7 +68,7 @@ pub export c("lc_cyna_img_v1_normalize_nef_sensor") fn normalize(
     const black: [4]u32 = [black00 as u32, black01 as u32, black10 as u32, black11 as u32];
     var row: usize = 0;
     while row < ch {
-        if cancelled(cancel_context) != 0 {
+        if cancelled(context) {
             return 7;
         }
         var column: usize = 0;

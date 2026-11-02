@@ -1,18 +1,18 @@
 import .engine.raw.nef.nef_source;
 import .engine.raw.nef.nef_mosaic;
-import .engine.pipeline.nef_pipeline;
-import .engine.pipeline.nef_tiff16;
+import .engine.pipeline.nef.nef_pipeline;
+import .engine.pipeline.nef.nef_tiff16_pipeline;
 import .engine.tiff.tiff;
 import std.fs;
 
-fn no_cancel(context: *const c_uchar): c_int {
+fn no_cancel(context: usize): bool {
     const ignored = context;
-    return 0;
+    return false;
 }
 
-fn cancel(context: *const c_uchar): c_int {
+fn cancel(context: usize): bool {
     const ignored = context;
-    return 1;
+    return true;
 }
 
 fn put16(bytes: []u8, at: usize, value: u16): void {
@@ -124,7 +124,7 @@ fn complete_fixture(): [512]u8 {
 
 test "Z8 NEF storage probe identifies bounded single-strip Bayer data" {
     const source = fixture();
-    const storage = nef_source.inspect(source[0..].ptr as! *const c_uchar, 240);
+    const storage = nef_source.inspect(source[0..].ptr as! *const u8, 240);
     assert(storage.status == 0);
     assert(storage.width == 4 and storage.height == 2 and storage.orientation == 6);
     assert(storage.strip_offset == 224 and storage.strip_bytes == 6 and storage.cfa == 0x02010100);
@@ -133,14 +133,14 @@ test "Z8 NEF storage probe identifies bounded single-strip Bayer data" {
 test "Z8 NEF storage probe rejects changed variant and out-of-range strip" {
     var source = fixture();
     put16(source[0..], 118 + 8, 1);
-    assert(nef_source.inspect(source[0..].ptr as! *const c_uchar, 240).status == 2);
+    assert(nef_source.inspect(source[0..].ptr as! *const u8, 240).status == 2);
     source = fixture();
     put32(source[0..], 166 + 8, 40);
-    assert(nef_source.inspect(source[0..].ptr as! *const c_uchar, 240).status == 1);
+    assert(nef_source.inspect(source[0..].ptr as! *const u8, 240).status == 1);
     source = fixture();
     source[64] = 88;
-    assert(nef_source.inspect(source[0..].ptr as! *const c_uchar, 240).status == 6);
-    assert(nef_source.inspect(0 as! *const c_uchar, 240).status == 1);
+    assert(nef_source.inspect(source[0..].ptr as! *const u8, 240).status == 6);
+    assert(nef_source.inspect(0 as! *const u8, 240).status == 1);
 }
 
 test "Z8 NEF source inspection binds storage and maker note bounds" {
@@ -159,7 +159,7 @@ test "Z8 NEF source decodes and normalizes a bounded synthetic mosaic" {
     var samples: [8]u16 = [0] ** 8;
     var normalized: [4]f32 = [9.0] ** 4;
     const result = nef_mosaic.decode_normalized(source[0..], samples[0..], normalized[0..],
-        8, no_cancel, 0 as! *const c_uchar
+        8, no_cancel, 0
     );
     assert(result.status == 0 and result.width == 2 and result.height == 2);
     assert(result.orientation == 6 and result.cfa[0] == 1 and result.cfa[1] == 0 and result.cfa[2] == 2 and result.cfa[3] == 1);
@@ -171,10 +171,10 @@ test "Z8 NEF source decodes and normalizes a bounded synthetic mosaic" {
     assert(normalized[3] == ((300 as f32) - (64 as f32)) / ((15311 as f32) - (64 as f32)));
     var untouched: [4]f32 = [9.0] ** 4;
     assert(nef_mosaic.decode_normalized(source[0..], samples[0..], untouched[0..],
-        7, no_cancel, 0 as! *const c_uchar
+        7, no_cancel, 0
     ).status == 3);
     assert(nef_mosaic.decode_normalized(source[0..], samples[0..], untouched[0..],
-        8, cancel, 0 as! *const c_uchar
+        8, cancel, 0
     ).status == 7);
     assert(untouched[0] == 9.0 and untouched[3] == 9.0);
 }
@@ -185,14 +185,14 @@ test "Z8 NEF headless preview uses the checked source and color route" {
     var normalized: [4]f32 = [0.0] ** 4;
     var output: [16]u8 = [0] ** 16;
     assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
-        output[0..], 2, 2, 0.0, no_cancel, 0 as! *const c_uchar
+        output[0..], 2, 2, 0.0, no_cancel, 0
     ) == 0);
     assert(output[3] == 255 and output[7] == 255 and output[15] == 255);
     assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
-        output[0..], 2, 2, 0.0, cancel, 0 as! *const c_uchar
+        output[0..], 2, 2, 0.0, cancel, 0
     ) == 7);
     assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
-        output[0..], 3, 2, 0.0, no_cancel, 0 as! *const c_uchar
+        output[0..], 3, 2, 0.0, no_cancel, 0
     ) == 4);
 }
 
@@ -203,10 +203,10 @@ test "Z8 NEF RGB16 uses the same scene rendering and bounds" {
     var rgba8: [16]u8 = [0] ** 16;
     var rgb16: [12]u16 = [0] ** 12;
     assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
-        rgba8[0..], 2, 2, 0.0, no_cancel, 0 as! *const c_uchar
+        rgba8[0..], 2, 2, 0.0, no_cancel, 0
     ) == 0);
     assert(nef_pipeline.render_rgb16(source[0..], samples[0..], normalized[0..],
-        rgb16[0..], 0.0, no_cancel, 0 as! *const c_uchar
+        rgb16[0..], 0.0, no_cancel, 0
     ) == 0);
     var pixel: usize = 0;
     while pixel < 4 {
@@ -221,10 +221,10 @@ test "Z8 NEF RGB16 uses the same scene rendering and bounds" {
     }
     var untouched: [12]u16 = [9] ** 12;
     assert(nef_pipeline.render_rgb16(source[0..], samples[0..], normalized[0..],
-        untouched[0..11], 0.0, no_cancel, 0 as! *const c_uchar
+        untouched[0..11], 0.0, no_cancel, 0
     ) == 4);
     assert(nef_pipeline.render_rgb16(source[0..], samples[0..], normalized[0..],
-        untouched[0..], 0.0, cancel, 0 as! *const c_uchar
+        untouched[0..], 0.0, cancel, 0
     ) == 7);
     assert(untouched[0] == 9 and untouched[11] == 9);
 }
@@ -239,11 +239,11 @@ test "Z8 NEF headless export produces profiled RGB16 TIFF bytes" {
     var normalized: [4]f32 = [0.0] ** 4;
     var rgb16: [12]u16 = [0] ** 12;
     var output: [3212]u8 = [9] ** 3212;
-    assert(nef_tiff16.render(source[0..], samples[0..], normalized[0..],
+    assert(nef_tiff16_pipeline.render(source[0..], samples[0..], normalized[0..],
         rgb16[0..], icc[..], output[0..], 0.0,
-        no_cancel, 0 as! *const c_uchar
+        no_cancel, 0
     ) == 0);
-    const bytes = output[0..].ptr as! *const c_uchar;
+    const bytes = output[0..].ptr as! *const u8;
     assert(tiff.u16le(bytes, 2) == 42 and tiff.u32le(bytes, 4) == 8);
     assert(tiff.u32le(bytes, 10 + 0 * 12 + 8) == 2);
     assert(tiff.u32le(bytes, 10 + 1 * 12 + 8) == 2);
@@ -252,9 +252,9 @@ test "Z8 NEF headless export produces profiled RGB16 TIFF bytes" {
     assert(tiff.u16le(bytes, 3188) == rgb16[0]);
     assert(tiff.u16le(bytes, 3210) == rgb16[11]);
     var untouched: [3212]u8 = [9] ** 3212;
-    assert(nef_tiff16.render(source[0..], samples[0..], normalized[0..],
+    assert(nef_tiff16_pipeline.render(source[0..], samples[0..], normalized[0..],
         rgb16[0..], icc[..], untouched[0..], 0.0,
-        cancel, 0 as! *const c_uchar
+        cancel, 0
     ) == 7);
     assert(untouched[0] == 9 and untouched[3211] == 9);
 }
