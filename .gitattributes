@@ -1,3 +1,4 @@
 *.icns binary
 *.png binary
 *.ttf binary
+*.cy linguist-language=Cyna -linguist-detectable
