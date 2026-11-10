@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-source "$root/toolchains/cyna.lock"
+source "$root/cyna-toolchain.lock"
 compiler="${1:-${LIGHTCEPT_CYNA_COMPILER:-$root/target/cyna-toolchain/cyna/zig-out/bin/cyna}}"
 receipt="$root/target/cyna-toolchain/receipt"
 if [[ ! -x "$compiler" || ! -f "$receipt" ]]; then

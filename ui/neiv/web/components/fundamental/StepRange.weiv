@@ -1,0 +1,61 @@
+<template>
+  <div class="row">
+    <StepButton :label="decreaseLabel()" :glyph="'−'" :compact="false"
+      :disabled="props.disabled || props.value <= props.min" @press="decrease" />
+    <input :id="props.id" type="range" :aria-describedby="props.describedBy"
+      :min="props.min" :max="props.max" step="1" :value="props.value" :disabled="props.disabled"
+      title="Double click the handle to reset" @mousedown="recordPress" @dblclick="resetFromThumb"
+      @input="preview" @change="change" />
+    <StepButton :label="increaseLabel()" :glyph="'+'" :compact="false"
+      :disabled="props.disabled || props.value >= props.max" @press="increase" />
+  </div>
+</template>
+
+<script lang="ts">
+  import StepButton from "./StepButton.weiv";
+  export interface Props {
+    id: string;
+    label: string;
+    describedBy: string;
+    value: number;
+    min: number;
+    max: number;
+    stepAmount: number;
+    disabled: boolean;
+  }
+  export let props: Props;
+
+  let firstPressOnThumb = false;
+  let secondPressOnThumb = false;
+  function decreaseLabel(): string { return `Decrease ${props.label.toLowerCase()}`; }
+  function increaseLabel(): string { return `Increase ${props.label.toLowerCase()}`; }
+  function recordPress(event: MouseEvent) {
+    const input = event.currentTarget as HTMLInputElement;
+    const bounds = input.getBoundingClientRect();
+    const fraction = (Number(input.value) - props.min) / (props.max - props.min);
+    const center = bounds.left + 5.5 + fraction * (bounds.width - 11);
+    const onThumb = Math.abs(event.clientX - center) <= 8;
+    if (event.detail === 1) firstPressOnThumb = onThumb;
+    if (event.detail === 2) secondPressOnThumb = onThumb;
+  }
+  function resetFromThumb(event: MouseEvent) {
+    if (!firstPressOnThumb || !secondPressOnThumb) return;
+    event.preventDefault();
+    emit('reset', null);
+  }
+  function preview(event: Event) { emit('preview', Number((event.target as HTMLInputElement).value)); }
+  function change(event: Event) { emit('commit', Number((event.target as HTMLInputElement).value)); }
+  function decrease() { emit('step', -props.stepAmount); }
+  function increase() { emit('step', props.stepAmount); }
+</script>
+
+<style>
+  .row { display: flex; align-items: center; gap: 9px; }
+  input { flex: 1; min-width: 0; height: 18px; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; }
+  input::-webkit-slider-runnable-track { height: 2px; border-radius: 2px; background: #647669; }
+  input::-webkit-slider-thumb { width: 11px; height: 11px; margin-top: -4.5px; border: 1px solid #d7e4cd; border-radius: 50%; background: #c6d8ba; appearance: none; -webkit-appearance: none; }
+  input:disabled::-webkit-slider-thumb { background: #7d8c7d; border-color: #9eac9e; }
+  input::-moz-range-track { height: 2px; border-radius: 2px; background: #647669; }
+  input::-moz-range-thumb { width: 11px; height: 11px; border: 1px solid #d7e4cd; border-radius: 50%; background: #c6d8ba; }
+  input:focus-visible { outline: 2px solid #d2e5bd; outline-offset: 2px; }
+</style>

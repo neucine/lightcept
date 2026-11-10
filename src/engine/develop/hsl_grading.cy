@@ -13,7 +13,9 @@ pub const hue_steps: usize = 12;
 pub const saturation_steps: usize = 5;
 pub const luminance_steps: usize = 5;
 pub const node_count: usize = 300;
-pub const maximum_pixels: usize = 16777216;
+pub const maximum_pixels: usize = 33554432;
+pub const editor_band_count: usize = 8;
+pub const editor_algorithm_version: u32 = 1;
 
 pub struct GradeNode {
     // Opponent-plane hue rotation [-180,180] degrees; chroma gain [0,2];
@@ -28,6 +30,68 @@ pub struct GradeAsset {
     pub nodes: []const GradeNode;
 }
 
+pub struct EightBandResult {
+    pub valid: bool;
+    pub nodes: [:]GradeNode;
+}
+
+// Compact editor recipe for eight hue bands in 45-degree steps. Each signed
+// percentage is in [-100,100]. Hue maps to [-45,45] degrees, saturation to
+// chroma gain [0,2], and luminance to [-1,1] EV. V1 stores all 24 integers.
+pub struct EightBandEdit {
+    pub version: u32;
+    pub hue_percent: [8]i32;
+    pub saturation_percent: [8]i32;
+    pub luminance_percent: [8]i32;
+}
+
+pub fn neutral_eight_band_edit(): EightBandEdit {
+    return {
+        version: editor_algorithm_version,
+        hue_percent: [0] ** 8,
+        saturation_percent: [0] ** 8,
+        luminance_percent: [0] ** 8
+    };
+}
+
+pub fn valid_eight_band_edit(edit: EightBandEdit): bool {
+    if edit.version != editor_algorithm_version {
+        return false;
+    }
+    var index: usize = 0;
+    while index < editor_band_count {
+        if edit.hue_percent[index] < -100 or edit.hue_percent[index] > 100
+        or edit.saturation_percent[index] < -100
+        or edit.saturation_percent[index] > 100
+        or edit.luminance_percent[index] < -100
+        or edit.luminance_percent[index] > 100 {
+            return false;
+        }
+        index = index + 1;
+    }
+    return true;
+}
+
+pub fn editor_nodes(edit: EightBandEdit): EightBandResult {
+    if not valid_eight_band_edit(edit) {
+        return {
+            valid: false,
+            nodes: []
+        };
+    }
+    var bands: [8]GradeNode = [neutral_node()] ** 8;
+    var index: usize = 0;
+    while index < editor_band_count {
+        bands[index] = {
+            hue_degrees: (edit.hue_percent[index] as f64) * 0.45,
+            chroma_gain: 1.0 + (edit.saturation_percent[index] as f64) / 100.0,
+            luminance_ev: (edit.luminance_percent[index] as f64) / 100.0
+        };
+        index = index + 1;
+    }
+    return eight_band_nodes(bands);
+}
+
 pub struct LookupResult {
     // 0 success, 1 invalid asset, 2 invalid coordinate.
     pub status: u32;
@@ -39,6 +103,52 @@ pub fn neutral_node(): GradeNode {
         hue_degrees: 0.0,
         chroma_gain: 1.0,
         luminance_ev: 0.0
+    };
+}
+
+// Translate eight evenly spaced hue bands (red at 0 degrees, then 45-degree
+// steps) into the complete LUT. Every saturation and luminance plane receives
+// the same operation. The interpolation wraps between the last and first band.
+// The caller owns the returned nodes and must keep them alive with GradeAsset.
+pub fn eight_band_nodes(bands: [8]GradeNode): EightBandResult {
+    var band: usize = 0;
+    while band < editor_band_count {
+        const node = bands[band];
+        if not (node.hue_degrees >= -180.0 and node.hue_degrees <= 180.0
+            and node.chroma_gain >= 0.0 and node.chroma_gain <= 2.0
+            and node.luminance_ev >= -2.0 and node.luminance_ev <= 2.0
+        ) {
+            return {
+                valid: false,
+                nodes: []
+            };
+        }
+        band = band + 1;
+    }
+    var nodes: [:]GradeNode = [];
+    var hue: usize = 0;
+    while hue < hue_steps {
+        const degrees = hue * 30;
+        const left = degrees / 45;
+        const right = (left + 1) % editor_band_count;
+        const weight = ((degrees % 45) as f64) / 45.0;
+        const a = bands[left];
+        const b = bands[right];
+        const node: GradeNode = {
+            hue_degrees: a.hue_degrees + weight * (b.hue_degrees - a.hue_degrees),
+            chroma_gain: a.chroma_gain + weight * (b.chroma_gain - a.chroma_gain),
+            luminance_ev: a.luminance_ev + weight * (b.luminance_ev - a.luminance_ev)
+        };
+        var plane: usize = 0;
+        while plane < saturation_steps * luminance_steps {
+            nodes.push(node);
+            plane = plane + 1;
+        }
+        hue = hue + 1;
+    }
+    return {
+        valid: true,
+        nodes: nodes
     };
 }
 
@@ -237,6 +347,65 @@ pub fn grade_pixel(red: f64, green: f64, blue: f64,
     const chroma = linear_chroma.apply_native(rotated[0], rotated[1], rotated[2], node.chroma_gain);
     const gain = output_color.exposure_gain_native(node.luminance_ev);
     return [chroma.red * gain, chroma.green * gain, chroma.blue * gain];
+}
+
+// Immutable interleaved f64 scene-linear Rec.2020/D65 RGB and disjoint
+// caller-owned output, each exactly width * height * 3 samples. The input
+// range is [-0.25,8] and the output range is [-128,128]. Status and
+// cancellation semantics match apply; no spatial halo or gamut clipping.
+pub fn apply_f64(input: []const f64, width: usize, height: usize,
+    asset: &const GradeAsset, output: []f64,
+    cancelled: fn (usize): bool, context: usize
+): u32 {
+    if not valid(asset) {
+        return 1;
+    }
+    if width == 0 or height == 0 or width > maximum_pixels
+    or height > maximum_pixels / width {
+        return 2;
+    }
+    const count = width * height * 3;
+    if input.len() != count or output.len() != count {
+        return 2;
+    }
+    var pass: usize = 0;
+    while pass < 2 {
+        var row: usize = 0;
+        while row < height {
+            if cancelled(context) {
+                return 7;
+            }
+            var column: usize = 0;
+            while column < width {
+                const offset = (row * width + column) * 3;
+                var channel: usize = 0;
+                while channel < 3 {
+                    const sample = input[offset + channel];
+                    if not (sample >= -0.25 and sample <= 8.0) {
+                        return 3;
+                    }
+                    channel = channel + 1;
+                }
+                const result = grade_pixel(input[offset], input[offset + 1],
+                    input[offset + 2], asset
+                );
+                channel = 0;
+                while channel < 3 {
+                    if not (result[channel] >= -128.0 and result[channel] <= 128.0) {
+                        return 4;
+                    }
+                    if pass == 1 {
+                        output[offset + channel] = result[channel];
+                    }
+                    channel = channel + 1;
+                }
+                column = column + 1;
+            }
+            row = row + 1;
+        }
+        pass = pass + 1;
+    }
+    return 0;
 }
 
 // Immutable interleaved f32 scene RGB [-0.25,8] and disjoint equal-size

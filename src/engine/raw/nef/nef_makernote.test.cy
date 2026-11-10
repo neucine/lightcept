@@ -59,13 +59,30 @@ fn fixture(): [170]u8 {
     return note;
 }
 
+fn packed_fixture(): [170]u8 {
+    var note = fixture();
+    entry(note[0..], 20, 0x0093, 3, 1, 10);
+    return note;
+}
+
 test "Z8 maker note supplies decoder and sensor metadata in declared units" {
     const note = fixture();
     const data = nef_makernote.parse(note[0..], 4, 4);
     assert(data.status == 0 and data.white == 15311);
+    assert(data.encoding == nef_makernote.encoding_lossless_huffman);
     assert(data.seeds[0] == 100 and data.seeds[3] == 400);
     assert(data.crop[0] == 1 and data.crop[1] == 1 and data.crop[2] == 2 and data.crop[3] == 2);
     assert(data.black[0] == 64 and data.black[3] == 64);
+    assert(data.red_gain == 2.0 and data.blue_gain == 1.5);
+}
+
+test "Z6 II packed maker note omits Huffman seeds and keeps sensor metadata" {
+    const note = packed_fixture();
+    const data = nef_makernote.parse(note[0..], 4, 4);
+    assert(data.status == 0);
+    assert(data.encoding == nef_makernote.encoding_packed_14);
+    assert(data.seeds[0] == 0 and data.seeds[3] == 0);
+    assert(data.crop[2] == 2 and data.black[0] == 64);
     assert(data.red_gain == 2.0 and data.blue_gain == 1.5);
 }
 
@@ -81,5 +98,8 @@ test "Z8 maker note rejects invalid version geometry and rational data" {
     assert(nef_makernote.parse(note[0..], 4, 4).status == 1);
     note = fixture();
     put32(note[0..], 56 + 8, 160);
+    assert(nef_makernote.parse(note[0..], 4, 4).status == 2);
+    note = packed_fixture();
+    entry(note[0..], 20, 0x0093, 3, 1, 3);
     assert(nef_makernote.parse(note[0..], 4, 4).status == 2);
 }

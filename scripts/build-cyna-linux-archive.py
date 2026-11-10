@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src/engine"
 CYNA_ROOT = ROOT / "src"
+MANIFEST = ROOT / "cyna.toml"
 
 
 def sha256(path: Path) -> str:
@@ -24,14 +25,10 @@ def sha256(path: Path) -> str:
 
 
 def pipeline_digest() -> str:
-    files = [PACKAGE / "lib.cy", CYNA_ROOT / "cyna.toml", CYNA_ROOT / "lib.cy"]
-    files += [ROOT / "toolchains/cyna.lock"]
+    files = [PACKAGE / "lib.cy", MANIFEST, CYNA_ROOT / "lib.cy"]
+    files += [ROOT / "cyna-toolchain.lock"]
     for name in ("color", "core", "develop", "pipeline", "raw", "render", "tiff", "assets"):
         files += [path for path in (PACKAGE / name).rglob("*") if path.is_file() and ".cyna-cache" not in path.parts]
-    files += [path for path in (CYNA_ROOT / "project").rglob("*") if path.is_file() and ".cyna-cache" not in path.parts]
-    files += [path for path in (CYNA_ROOT / "intent").rglob("*") if path.is_file() and ".cyna-cache" not in path.parts]
-    files += [path for path in (CYNA_ROOT / "contract").rglob("*") if path.is_file() and ".cyna-cache" not in path.parts]
-    files += [path for path in (CYNA_ROOT / "desktop").rglob("*") if path.is_file() and ".cyna-cache" not in path.parts]
     digest = hashlib.sha256(b"lightcept-native-source-v1\0")
     for path in sorted(files):
         name = path.relative_to(ROOT).as_posix().encode()
@@ -68,16 +65,13 @@ def main() -> None:
     archive = args.output_dir / "liblightcept_cyna_imaging.a"
     with tempfile.TemporaryDirectory(prefix="lightcept-cyna-linux-") as temporary:
         project = Path(temporary)
-        shutil.copy2(CYNA_ROOT / "lib.cy", project / "lib.cy")
-        (project / "engine").mkdir()
-        shutil.copy2(PACKAGE / "lib.cy", project / "engine/lib.cy")
+        (project / "src").mkdir()
+        shutil.copy2(CYNA_ROOT / "lib.cy", project / "src/lib.cy")
+        (project / "src/engine").mkdir()
+        shutil.copy2(PACKAGE / "lib.cy", project / "src/engine/lib.cy")
         for name in ("color", "core", "develop", "pipeline", "raw", "render", "tiff"):
-            shutil.copytree(PACKAGE / name, project / "engine" / name)
-        shutil.copytree(CYNA_ROOT / "project", project / "project")
-        shutil.copytree(CYNA_ROOT / "intent", project / "intent")
-        shutil.copytree(CYNA_ROOT / "contract", project / "contract")
-        shutil.copytree(CYNA_ROOT / "desktop", project / "desktop")
-        config = (CYNA_ROOT / "cyna.toml").read_text()
+            shutil.copytree(PACKAGE / name, project / "src/engine" / name)
+        config = MANIFEST.read_text()
         assert 'target = "native"' in config
         (project / "cyna.toml").write_text(config.replace('target = "native"', 'target = "aarch64-unknown-linux-gnu"'))
         environment = os.environ.copy()
@@ -88,7 +82,7 @@ def main() -> None:
     manifest = {
         "target": "aarch64-unknown-linux-gnu",
         "pipeline_source_sha256": pipeline_digest(),
-        "cyna_lock_sha256": sha256(ROOT / "toolchains/cyna.lock"),
+        "cyna_lock_sha256": sha256(ROOT / "cyna-toolchain.lock"),
         "archive_sha256": sha256(archive),
         "compiler_receipt_sha256": sha256(receipt),
         "linux_headers_sha256": headers_digest(include),

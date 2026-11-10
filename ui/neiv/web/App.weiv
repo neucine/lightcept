@@ -1,0 +1,1372 @@
+<template>
+  <main class="app">
+    <header class="topbar">
+      <div class="identity"><strong class="brand">LIGHTCEPT</strong><span class="photo-name" #if="photoName !== ''" :title="photoName">{{ photoName }}</span></div>
+      <div class="header-actions"><span class="header-status" #if="status !== '' || rendering" role="status" aria-live="polite" :title="rendering ? 'Updating preview…' : status">{{ rendering ? 'Updating preview…' : status }}</span><button class="quiet-button" #if="!opening && !saving && !exporting" :disabled="rendering" @click="openProject">Open Project</button><button class="quiet-button" #if="hasPhoto && !opening && !saving && !exporting" :disabled="rendering || !developAvailable" @click="saveProject">Save Project</button><button class="quiet-button" #if="developAvailable && !opening && !saving && !exporting" :disabled="rendering" @click="exportTiff">Export TIFF</button><button class="quiet-button" #if="hasPhoto && !opening && !saving && !exporting" :disabled="rendering" @click="open">Open Photo</button><button class="quiet-button" #if="cancellableOpening" @click="cancel">Cancel</button><button class="quiet-button" #if="exporting" @click="cancelTiffExport">Cancel export</button></div>
+    </header>
+    <section class="workspace">
+      <aside class="navigator">
+        <h2 class="section-heading">Navigator</h2>
+        <div class="navigator-frame"><div id="navigator-preview" class="navigator-preview"></div></div>
+        <p class="source-note" #if="hasPhoto">FITTED VIEW</p>
+        <div class="navigator-group edits-group" #if="hasPhoto && developAvailable"><h3>Edits</h3><p class="edit-position">{{ historyPosition() }}</p><div class="edit-actions"><button class="quiet-button" :disabled="opening || rendering || !canUndo" @click="undo">Earlier</button><button class="quiet-button" :disabled="opening || rendering || !canRedo" @click="redo">Later</button></div></div>
+      </aside>
+      <section class="editor">
+        <div class="editor-toolbar"><div class="comparison-actions" #if="developAvailable && previewFailure === ''" role="group" aria-label="Comparison view"><button :aria-pressed="comparisonMode === 1 ? 'true' : 'false'" :disabled="opening || rendering" title="Show the original photograph" @click="setComparison(1)">Original</button><button :aria-pressed="comparisonMode === 0 ? 'true' : 'false'" :disabled="opening || rendering" title="Show the current edited result" @click="setComparison(0)">Edited</button><button :aria-pressed="comparisonMode === 2 ? 'true' : 'false'" :disabled="opening || rendering" title="Drag the divider to compare" @click="setComparison(2)">Split</button></div><button class="icon-button" #if="developAvailable && previewFailure === ''" :aria-pressed="cropMode ? 'true' : 'false'" aria-label="Crop photograph" title="Crop photograph" :disabled="opening || rendering" @click="toggleCrop"><span class="crop-icon" aria-hidden="true"></span><span>Crop</span></button><div class="preview-error" #if="previewFailure !== '' && hasPhoto" role="alert"><span>{{ previewFailure }}</span><div #if="failedBatch.length > 0" class="preview-recovery"><button @click="retryPreview">Retry preview</button><button @click="discardFailedPreview">Use completed result</button></div></div><label class="proof-choice" #if="developAvailable && previewFailure === ''">Soft Proof <select aria-label="Soft Proof profile" :disabled="opening || rendering" @change="changeProof"><option value="0">Off</option><option value="1">sRGB</option><option value="2">Adobe RGB</option><option value="3">Monitor ICC</option></select></label></div>
+        <div class="crop-panel" #if="cropMode && hasPhoto"><span>Drag to crop; drag inside to move or a corner to resize</span><label>Ratio <select aria-label="Crop ratio" :value="cropRatio" @change="changeCropRatio"><option value="0">Free</option><option value="1">1:1</option><option value="2">4:3</option><option value="3">3:2</option><option value="4">16:9</option></select></label><label>Straighten <input aria-label="Straighten angle" type="range" min="-17" max="17" step="0.1" :value="cropAngle / 1000" @input="changeCropAngle" /></label><span>{{ (cropAngle / 1000).toFixed(1) }}°</span><label>Orientation <select aria-label="Photo orientation" :disabled="!cropDraft || opening || rendering" @change="changeOrientation"><option value="0">Choose…</option><option value="1">Original</option><option value="2">Flip horizontal</option><option value="3">Rotate 180°</option><option value="4">Flip vertical</option><option value="5">Transpose</option><option value="6">Rotate right 90°</option><option value="7">Transverse</option><option value="8">Rotate left 90°</option></select></label><button :disabled="!cropDraft || opening || rendering" @click="applyCrop">Apply</button><button @click="closeCrop">Cancel</button></div>
+        <div class="stage"><div id="photo-preview" class="preview"></div><div class="empty" #if="!hasPhoto"><div class="empty-mark">✳</div><h1 class="empty-title">Your photograph starts here</h1><p>Open a supported RAW photo to view and develop it.</p><button class="open-button" :disabled="opening || rendering" @click="open">Open Photo</button></div></div>
+        <div class="canvas-footer" #if="hasPhoto"><span #if="comparisonMode === 2">Drag divider to compare original and edited</span><div><PhotoZoomControls :percent="zoomPercent" :sourceDetailReady="sourceDetailReady" @preview="previewZoom" @select="setZoom" /></div></div>
+      </section>
+      <aside class="develop-rail" :inert="failedBatch.length > 0 ? '' : null">
+        <div class="develop-header"><h2>Develop</h2></div>
+        <div class="histogram"><div class="histogram-heading"><span>HISTOGRAM</span><span class="histogram-mode" #if="hasPhoto">RGB · LUMA</span></div><div class="histogram-grid"><div id="histogram-preview" class="histogram-preview"></div><span #if="!hasPhoto">Open a photograph</span></div><div class="histogram-scale"><span>SHADOWS</span><span>MIDTONES</span><span>HIGHLIGHTS</span></div></div>
+        <div class="develop-tabs" role="tablist" aria-label="Develop controls" @keydown="onTabKeydown"><button id="develop-tab-light" role="tab" aria-controls="develop-panel-light" :aria-selected="activeTab === 'light' ? 'true' : 'false'" :tabindex="activeTab === 'light' ? 0 : -1" :class="activeTab === 'light' ? 'selected' : ''" @click="selectTab('light')">Light</button><button id="develop-tab-color" role="tab" aria-controls="develop-panel-color" :aria-selected="activeTab === 'color' ? 'true' : 'false'" :tabindex="activeTab === 'color' ? 0 : -1" :class="activeTab === 'color' ? 'selected' : ''" @click="selectTab('color')">Color</button><button id="develop-tab-detail" role="tab" aria-controls="develop-panel-detail" :aria-selected="activeTab === 'detail' ? 'true' : 'false'" :tabindex="activeTab === 'detail' ? 0 : -1" :class="activeTab === 'detail' ? 'selected' : ''" @click="selectTab('detail')">Detail</button></div>
+        <div class="help-card" role="status" #if="helpText !== ''">{{ helpText }}</div>
+        <div id="develop-panel-light" role="tabpanel" aria-labelledby="develop-tab-light" :class="activeTab === 'light' ? 'develop-content' : 'develop-content inactive'"><div class="group-title-row"><h3 class="group-heading">Light</h3><button #if="developAvailable" class="reset-button" :disabled="opening || rendering || !lightChanged()" @click="resetLight">Reset Light</button></div><p class="group-description">Shape brightness, tonal detail, and the darkest and brightest points.</p>
+          <section class="adjustment-section" #if="developAvailable" aria-label="Overall brightness">
+          <h4 class="control-section">Overall brightness</h4>
+          <p #if="developAvailable" class="control-cue">Make the whole photograph lighter or darker.</p>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'exposure'" :name="'Exposure'" :help="'Brightens or darkens the whole photo. One EV doubles or halves the light.'" :value="exposureTenths" :displayValue="exposureLabel()" :min="-40" :max="40" :stepAmount="5" :lowLabel="'−4 EV'" :highLabel="'+4 EV'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          </section>
+          <section class="adjustment-section" #if="developAvailable" aria-label="Bright and dark detail">
+          <h4 class="control-section">Bright and dark detail</h4>
+          <p #if="developAvailable" class="control-cue">Adjust the brighter and darker areas separately.</p>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'shadows'" :name="'Shadows'" :help="'Changes darker tones while leaving brighter areas less affected.'" :value="shadowsPercent" :displayValue="toneLabel(shadowsPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'−100'" :highLabel="'+100'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'highlights'" :name="'Highlights'" :help="'Changes brighter tones while leaving darker areas less affected.'" :value="highlightsPercent" :displayValue="toneLabel(highlightsPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'−100'" :highLabel="'+100'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          </section>
+          <section class="adjustment-section" #if="developAvailable" aria-label="Depth">
+          <h4 class="control-section">Depth</h4>
+          <p #if="developAvailable" class="control-cue">Set the separation between light and dark, then refine the endpoints.</p>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'contrast'" :name="'Contrast'" :help="'Increases or reduces the separation between dark and bright tones.'" :value="contrastPercent" :displayValue="contrastLabel()" :min="-100" :max="100" :stepAmount="10" :lowLabel="'−100'" :highLabel="'+100'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'blacks'" :name="'Blacks'" :help="'Sets the depth of the darkest tones.'" :value="blacksPercent" :displayValue="toneLabel(blacksPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'−100'" :highLabel="'+100'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'whites'" :name="'Whites'" :help="'Sets the brightest tones and highlight brightness.'" :value="whitesPercent" :displayValue="toneLabel(whitesPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'−100'" :highLabel="'+100'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          </section>
+          <section class="curve-editor" #if="developAvailable" aria-label="Precise tone">
+            <button type="button" class="disclosure-button" :aria-expanded="curvesOpen ? 'true' : 'false'" aria-controls="curve-controls" @click="toggleCurves">{{ curvesChanged() ? 'Precise tone · adjusted' : 'Precise tone' }} <span aria-hidden="true">{{ curvesOpen ? '▾' : '▸' }}</span></button>
+            <div id="curve-controls" :class="curvesOpen ? '' : 'disclosure-closed'">
+            <p class="curve-description">Shape overall brightness or individual color channels across shadows, midtones, and highlights.</p>
+            <div class="curve-channels" role="tablist" aria-label="Curve channel"><button type="button" #for="channel in curveChannels" role="tab" :aria-selected="curveChannel === channel.index ? 'true' : 'false'" :class="curveChannel === channel.index ? 'selected' : ''" :data-channel="channel.index" @click="selectCurveChannel">{{ channel.name }}</button></div>
+            <canvas id="curve-graph" class="curve-graph" width="200" height="200" role="group" :aria-label="curveGraphLabel()" @pointerdown="startCurveDrag" @pointermove="moveCurveDrag" @pointerup="finishCurveDrag" @pointercancel="cancelCurveDrag"></canvas>
+            <div class="curve-sliders"><DevelopSlider #for="row in curveRows" :id="row.id" :name="row.name" :help="row.help" :value="row.value" :resetValue="row.neutral" :displayValue="row.display" :min="row.min" :max="row.max" :stepAmount="10" :lowLabel="'Darker'" :highLabel="'Brighter'" :disabled="!developAvailable" @preview="previewCurve" @commit="commitCurve" @step="stepCurve" @reset="resetCurvePoint" @help="showHelp" @hide-help="closeHelp" /></div>
+            </div>
+          </section>
+          <p #if="hasPhoto && !developAvailable" class="availability">This photograph can be viewed. Develop controls require a qualified RAW variant.</p>
+          <p #if="!hasPhoto" class="availability">Develop controls appear when a qualified photograph is open.</p>
+          <div class="develop-divider" #if="hasPhoto"></div><p class="source-safety" #if="hasPhoto">Original photograph preserved</p>
+        </div>
+        <div id="develop-panel-color" role="tabpanel" aria-labelledby="develop-tab-color" :class="activeTab === 'color' ? 'develop-content' : 'develop-content inactive'">
+          <div class="group-title-row"><h3 class="group-heading">Color</h3><button #if="developAvailable" class="reset-button" :disabled="opening || rendering || !colorChanged()" @click="resetColor">Reset basic color</button></div>
+          <p #if="developAvailable" class="group-description">Start with the whole photograph, then choose a specific color if needed. Warmth and tint are relative to the camera’s as shot color.</p>
+          <section class="adjustment-section" #if="developAvailable" aria-label="Overall color">
+          <h4 class="control-section">Overall color</h4>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'warmth'" :name="'Warmth'" :help="'Moves colors warmer or cooler relative to the camera color.'" :value="warmthPercent" :displayValue="toneLabel(warmthPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Cooler'" :highLabel="'Warmer'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'tint'" :name="'Tint'" :help="'Moves colors toward magenta or green relative to the camera color.'" :value="tintPercent" :displayValue="toneLabel(tintPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Greener'" :highLabel="'More magenta'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'vibrance'" :name="'Vibrance'" :help="'Changes muted colors more strongly than already vivid colors.'" :value="vibrancePercent" :displayValue="toneLabel(vibrancePercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Less'" :highLabel="'More'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <button #if="developAvailable" type="button" class="disclosure-button" :aria-expanded="moreColorOpen ? 'true' : 'false'" aria-controls="more-color" @click="toggleMoreColor">{{ saturationPercent !== 0 ? 'More color control · adjusted' : 'More color control' }} <span aria-hidden="true">{{ moreColorOpen ? '▾' : '▸' }}</span></button>
+          <div id="more-color" :class="moreColorOpen ? '' : 'disclosure-closed'"><div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'saturation'" :name="'Saturation'" :help="'Changes all colors equally. Minus 100 makes the photo monochrome.'" :value="saturationPercent" :displayValue="toneLabel(saturationPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Monochrome'" :highLabel="'More color'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div></div>
+          </section>
+          <section class="adjustment-section" #if="developAvailable" aria-label="Specific colors">
+          <h4 class="control-section">Specific colors</h4>
+          <p #if="developAvailable" class="control-cue">Pick a color from the photograph or choose a color group.</p>
+          <div class="color-methods" #if="developAvailable" role="tablist" aria-label="Choose specific colors"><button type="button" role="tab" :aria-selected="colorMode === 'picked' ? 'true' : 'false'" :class="colorMode === 'picked' ? 'selected' : ''" @click="selectColorMode('picked')">Pick from photo</button><button type="button" role="tab" :aria-selected="colorMode === 'groups' ? 'true' : 'false'" :class="colorMode === 'groups' ? 'selected' : ''" @click="selectColorMode('groups')">Color Groups</button></div>
+          <section class="hsl-editor" #if="developAvailable && colorMode === 'groups'" aria-label="Color Groups">
+            <div class="hsl-heading"><span class="hsl-view-label">View</span><div class="hsl-layouts" role="group" aria-label="Color Groups layout">
+              <button type="button" aria-label="By adjustment" title="By adjustment" :aria-pressed="hslLayout === 'adjustment' ? 'true' : 'false'" @click="selectHslLayout('adjustment')"><span class="layout-adjustment-icon" aria-hidden="true"><i></i><i></i><i></i></span></button>
+              <button type="button" aria-label="By color" title="By color" :aria-pressed="hslLayout === 'color' ? 'true' : 'false'" @click="selectHslLayout('color')"><span class="layout-color-icon" aria-hidden="true"><i></i><i></i><i></i></span></button>
+            </div></div>
+            <div #if="hslLayout === 'adjustment'">
+              <div class="hsl-modes" role="tablist" aria-label="Color Mixer adjustment"><button type="button" role="tab" :aria-selected="hslMode === 0 ? 'true' : 'false'" :class="hslMode === 0 ? 'selected' : ''" @click="selectHslMode(0)">Hue</button><button type="button" role="tab" :aria-selected="hslMode === 1 ? 'true' : 'false'" :class="hslMode === 1 ? 'selected' : ''" @click="selectHslMode(1)">Saturation</button><button type="button" role="tab" :aria-selected="hslMode === 2 ? 'true' : 'false'" :class="hslMode === 2 ? 'selected' : ''" @click="selectHslMode(2)">Luminance</button></div>
+              <div class="hsl-rows"><HslMixerRow #for="row in hslRows" :band="row.band" :kind="row.kind" :name="row.name" :ariaLabel="row.ariaLabel" :swatchClass="row.swatchClass" :value="row.value" :display="row.display" :showSwatch="true" :disabled="!developAvailable" @preview="previewHslRow" @commit="commitHslRow" @step="stepHslRow" @reset="resetHslRow" /></div>
+            </div>
+            <div #if="hslLayout === 'color'">
+              <div class="hsl-color-choices" role="group" aria-label="Choose color range"><button type="button" #for="band in hslBands" :aria-pressed="band.index === hslSelectedBand ? 'true' : 'false'" :aria-label="hslBandChanged(band.index) ? band.name + ', adjusted' : band.name" :data-band="band.index" @click="selectHslColor"><span :class="band.swatchClass" aria-hidden="true"></span>{{ band.name }}<span #if="hslBandChanged(band.index)" class="hsl-edited" aria-hidden="true"></span></button></div>
+              <div class="hsl-rows"><HslMixerRow #for="row in hslColorRows" :band="row.band" :kind="row.kind" :name="row.name" :ariaLabel="row.ariaLabel" :swatchClass="row.swatchClass" :value="row.value" :display="row.display" :showSwatch="false" :disabled="!developAvailable" @preview="previewHslRow" @commit="commitHslRow" @step="stepHslRow" @reset="resetHslRow" /></div>
+            </div>
+            <p class="hsl-note">Each range blends smoothly into its neighbors.</p>
+          </section>
+          <section class="picked-editor" #if="developAvailable && colorMode === 'picked'" aria-label="Picked Color">
+            <div class="group-title-row"><h4 class="control-section">Picked Color</h4><button type="button" class="quiet-button" :aria-pressed="gradeValues[19] === 1 ? 'true' : 'false'" :disabled="opening" @click="togglePickedColor">{{ gradeValues[19] === 1 ? 'Selection on' : 'Selection off' }}</button></div>
+            <p class="grading-description">Choose a color, then adjust only similar colors in the photo.</p>
+            <button type="button" class="quiet-button pick-color-button" :aria-pressed="pickingColor ? 'true' : 'false'" :disabled="opening" @click="startColorPick">{{ pickingColor ? 'Click a color in the photo' : 'Pick from photo' }}</button>
+            <button #if="gradeValues[19] === 1" type="button" class="quiet-button pick-color-button" :aria-pressed="showAffected ? 'true' : 'false'" @click="toggleAffected">{{ showAffected ? 'Hide affected area' : 'Show affected area' }}</button>
+            <div #if="gradeValues[19] === 1">
+            <DevelopSlider :id="'grade-13'" :name="'Selected color'" :help="'Chooses the center hue of the selected color range.'" :value="gradeValues[13]" :displayValue="gradeValues[13] + '°'" :min="0" :max="359" :stepAmount="5" :lowLabel="'Red'" :highLabel="'Red'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-14'" :name="'Range'" :help="'Sets how far from the selected color the adjustment reaches.'" :value="gradeValues[14] || 20" :displayValue="(gradeValues[14] || 20) + '°'" :min="2" :max="90" :stepAmount="2" :lowLabel="'Narrow'" :highLabel="'Wide'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-15'" :name="'Softness'" :help="'Blends the edge of the selected color range into neighboring colors.'" :value="gradeValues[15] || 50" :displayValue="(gradeValues[15] || 50) + '%'" :min="1" :max="100" :stepAmount="5" :lowLabel="'Firm'" :highLabel="'Soft'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-16'" :name="'Hue'" :help="'Shifts the color of the selected pixels.'" :value="gradeValues[16]" :displayValue="toneLabel(gradeValues[16])" :min="-100" :max="100" :stepAmount="5" :lowLabel="'Left'" :highLabel="'Right'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-17'" :name="'Saturation'" :help="'Changes the vividness of the selected pixels.'" :value="gradeValues[17]" :displayValue="toneLabel(gradeValues[17])" :min="-100" :max="100" :stepAmount="5" :lowLabel="'Less'" :highLabel="'More'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-18'" :name="'Brightness'" :help="'Brightens or darkens the selected pixels.'" :value="gradeValues[18]" :displayValue="toneLabel(gradeValues[18])" :min="-100" :max="100" :stepAmount="5" :lowLabel="'Darker'" :highLabel="'Brighter'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            </div>
+          </section>
+          </section>
+          <section class="adjustment-section creative-color" #if="developAvailable" aria-label="Creative color">
+            <button type="button" class="disclosure-button" :aria-expanded="gradeOpen ? 'true' : 'false'" aria-controls="color-grade-controls" @click="toggleGrade">{{ gradingChanged() ? 'Creative color · adjusted' : 'Creative color' }} <span aria-hidden="true">{{ gradeOpen ? '▾' : '▸' }}</span></button>
+            <div id="color-grade-controls" :class="gradeOpen ? '' : 'disclosure-closed'">
+          <section class="grading-editor" aria-label="Color Grade">
+            <div class="group-title-row"><h4 class="control-section">Color Grade</h4></div>
+            <p class="grading-description">Add color to shadows, midtones, highlights, or the whole image.</p>
+            <div class="grading-tabs" role="tablist" aria-label="Grading range"><button #for="range in gradingRanges" type="button" role="tab" :aria-selected="gradeRange === range.index ? 'true' : 'false'" :class="gradeRange === range.index ? 'selected' : ''" :data-range="range.index" @click="selectGradeRange">{{ range.name }}</button></div>
+            <div class="grading-wheel-wrap"><div class="grading-wheel" role="slider" tabindex="0" :aria-label="gradingRanges[gradeRange].name + ' color wheel'" :aria-valuenow="gradeValues[gradeRange * 3 + 1]" :aria-valuetext="gradeWheelLabel()" @pointerdown="startGradeWheel" @pointermove="moveGradeWheel" @pointerup="finishGradeWheel" @pointercancel="cancelGradeWheel" @keydown="gradeWheelKeydown"><span class="grading-wheel-center"></span><span class="grading-wheel-handle" :style="gradeWheelHandleStyle()"></span></div></div>
+            <DevelopSlider :id="'grade-' + (gradeRange * 3)" :name="'Hue'" :help="'Chooses the tint color for this tonal range.'" :value="gradeValues[gradeRange * 3]" :displayValue="gradeValues[gradeRange * 3] + '°'" :min="0" :max="359" :stepAmount="5" :lowLabel="'Red'" :highLabel="'Red'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-' + (gradeRange * 3 + 1)" :name="'Strength'" :help="'Sets how much color is added to this tonal range.'" :value="gradeValues[gradeRange * 3 + 1]" :displayValue="gradeValues[gradeRange * 3 + 1] + '%'" :min="0" :max="100" :stepAmount="5" :lowLabel="'None'" :highLabel="'More'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-' + (gradeRange * 3 + 2)" :name="'Luminance'" :help="'Brightens or darkens this tonal range independently of its tint.'" :value="gradeValues[gradeRange * 3 + 2]" :displayValue="toneLabel(gradeValues[gradeRange * 3 + 2])" :min="-100" :max="100" :stepAmount="5" :lowLabel="'Darker'" :highLabel="'Brighter'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+            <DevelopSlider :id="'grade-12'" :name="'Balance'" :help="'Shifts the transition between shadow and highlight grading.'" :value="gradeValues[12]" :displayValue="toneLabel(gradeValues[12])" :min="-100" :max="100" :stepAmount="5" :lowLabel="'Shadows'" :highLabel="'Highlights'" :disabled="!developAvailable" @preview="previewGrade" @commit="commitGrade" @step="stepGrade" @reset="resetGrade" @help="showHelp" @hide-help="closeHelp" />
+          </section>
+            </div>
+          </section>
+          <p #if="hasPhoto && !developAvailable" class="availability">This photograph can be viewed. Develop controls require a qualified RAW variant.</p>
+          <p #if="!hasPhoto" class="availability">Develop controls appear when a qualified photograph is open.</p>
+          <div class="develop-divider" #if="hasPhoto"></div><p class="source-safety" #if="hasPhoto">Original photograph preserved</p>
+        </div>
+        <div id="develop-panel-detail" role="tabpanel" aria-labelledby="develop-tab-detail" :class="activeTab === 'detail' ? 'develop-content' : 'develop-content inactive'">
+          <div class="group-title-row"><h3 class="group-heading">Detail</h3><button #if="developAvailable" class="reset-button" :disabled="opening || rendering || (clarityPercent === 0 && texturePercent === 0)" @click="resetDetail">Reset Detail</button></div>
+          <p #if="developAvailable" class="group-description">Change the appearance of fine surface texture or broader local contrast. Inspect the photograph at a closer zoom to judge the result.</p>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'clarity'" :name="'Clarity'" :help="'Changes midscale local contrast so texture looks clearer or softer.'" :value="clarityPercent" :displayValue="toneLabel(clarityPercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Softer'" :highLabel="'Clearer'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <div :class="developAvailable ? '' : 'hidden-control'"><DevelopSlider :id="'texture'" :name="'Texture'" :help="'Smooths or enhances fine detail while limiting changes at strong edges.'" :value="texturePercent" :displayValue="toneLabel(texturePercent)" :min="-100" :max="100" :stepAmount="10" :lowLabel="'Smoother'" :highLabel="'More texture'" :disabled="!developAvailable" @preview="previewControl" @commit="commitControlChange" @step="stepControl" @reset="resetControl" @help="showHelp" @hide-help="closeHelp" /></div>
+          <p #if="hasPhoto && !developAvailable" class="availability">This photograph can be viewed. Develop controls require a qualified RAW variant.</p>
+          <p #if="!hasPhoto" class="availability">Develop controls appear when a qualified photograph is open.</p>
+          <div class="develop-divider" #if="hasPhoto"></div><p class="source-safety" #if="hasPhoto">Original photograph preserved</p>
+        </div>
+      </aside>
+    </section>
+    <footer class="filmstrip"><div class="filmstrip-content"><div :class="hasPhoto ? 'filmstrip-tile' : 'filmstrip-tile hidden-control'" :aria-hidden="hasPhoto ? 'false' : 'true'" :aria-label="photoName || 'Open photograph'"><span id="filmstrip-preview" class="tile-image"></span></div><span class="filmstrip-name" #if="photoName !== ''" :title="photoName">{{ photoName }}</span></div></footer>
+  </main>
+</template>
+<script lang="ts">
+  import DevelopSlider from "./components/domain/DevelopSlider.weiv";
+  import HslMixerRow from "./components/domain/HslMixerRow.weiv";
+  import PhotoZoomControls from "./components/domain/PhotoZoomControls.weiv";
+  import { cancelOpen, cancelExport, documentSnapshot, exportStatus, exportTiff as startTiffExport, undoEdit, redoEdit, commitGeometry, commitTransform, hslValue, setHsl, curveValue, setCurve, gradeValue, setGrade, setGradeWheel, setPickedColor, setAdjustment, pickColorFromPhoto, showPickMask, setCropTool, setCropRatio, newWindow as createWindow, openPhoto, openProject as openSavedProject, saveProject as saveCurrentProject, resetLight as resetLightCommand, resetColor as resetColorCommand, resetDetail as resetDetailCommand, setPreviewDisplay, setPreviewZoom, setClarity, setTexture, setColor, setContrast, setExposure, setTone, showFilmstripPreview, showHistogram, showNavigatorPreview, showPreview } from "./generated/commands.ts";
+  import { attachNativeSlot } from "neiv/slots";
+  import { events } from "./generated/events.ts";
+  // Weiv manages these bindings directly. Assignments from handlers, promises,
+  // timers, and event subscriptions notify the page without an update wrapper.
+  let hasPhoto = false;
+  let photoName = '';
+  let opening = false;
+  let cancellableOpening = false;
+  let rendering = false;
+  let previewFailure = '';
+  let saving = false;
+  let exporting = false;
+  let comparisonMode = 0;
+  let proofProfile = 0;
+  let zoomPercent = 0;
+  let sourceDetailReady = false;
+  async function setZoom(percent: number) {
+    if (await setPreviewZoom(percent)) { zoomPercent = percent; }
+  }
+  let zoomFrame = 0;
+  function previewZoom(percent: number) {
+    if (zoomFrame) cancelAnimationFrame(zoomFrame);
+    zoomFrame = requestAnimationFrame(() => { zoomFrame = 0; void setZoom(percent); });
+  }
+  async function setComparison(mode: number) {
+    if (await setPreviewDisplay(mode, proofProfile)) { comparisonMode = mode; }
+  }
+  async function changeProof(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const profile = Number(select.value);
+    if (await setPreviewDisplay(comparisonMode, profile)) { proofProfile = profile; }
+    else select.value = String(proofProfile);
+  }
+  events.subscribe("lightcept.zoom", event => { zoomPercent = event.percent; });
+  events.subscribe("lightcept.detail", event => { sourceDetailReady = event.ready; });
+  events.subscribe("lightcept.color_pick", event => { void finishColorPick(event.hue); });
+  let cropMode = false;
+  let cropDraft: { left: number; top: number; width: number; height: number } | null = null;
+  let cropAngle = 0;
+  let cropRatio = 0;
+  let cropAngleChanged = false;
+  events.subscribe("lightcept.crop", event => {
+    cropDraft = { left: event.left, top: event.top, width: event.width, height: event.height };
+    if (!cropAngleChanged) cropAngle = event.angleMillidegrees;
+  });
+  async function toggleCrop() {
+    const enabled = !cropMode;
+    if (enabled) await setCropRatio(0);
+    if (await setCropTool(enabled ? 1 : 0)) { cropMode = enabled; cropRatio = 0; cropAngleChanged = false; if (!enabled) cropDraft = null; }
+  }
+  async function closeCrop() {
+    if (await setCropTool(0)) { cropMode = false; cropDraft = null; cropAngleChanged = false; }
+  }
+  async function changeCropRatio(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const preset = Number(select.value);
+    if (await setCropRatio(preset)) { cropRatio = preset; }
+    else select.value = String(cropRatio);
+  }
+  function changeCropAngle(event: Event) {
+    const value = Number((event.target as HTMLInputElement).value);
+    cropAngle = Math.round(value * 1000); cropAngleChanged = true;
+  }
+  async function changeOrientation(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const code = Number(select.value);
+    const selected = cropDraft;
+    if (!selected || !code || opening) return;
+    const before = await documentSnapshot();
+    opening = true; status = "Applying orientation…";
+    try {
+      const result = await commitTransform(code, selected.left, selected.top, selected.width, selected.height, cropAngle);
+      if (result === 1) {
+        await followOpen(before.committedGeneration, before.editRevision, "Orientation");
+        const after = await documentSnapshot();
+        if (after.committedGeneration !== before.committedGeneration) await closeCrop();
+      } else { status = "Could not apply orientation"; }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally {
+      select.value = "0";
+      opening = false;
+    }
+  }
+  async function applyCrop() {
+    const selected = cropDraft;
+    if (!selected || opening) return;
+    const before = await documentSnapshot();
+    opening = true; status = "Applying crop…";
+    try {
+      if (await commitGeometry(selected.left, selected.top, selected.width, selected.height, cropAngle)) {
+        await followOpen(before.committedGeneration, before.editRevision, "Crop");
+        const after = await documentSnapshot();
+        if (after.committedGeneration !== before.committedGeneration) await closeCrop();
+      } else { status = "Could not apply crop"; }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally { opening = false; }
+  }
+
+  let activeTab: 'light' | 'color' | 'detail' = 'light';
+  let helpText = '';
+  function showHelp(message: string) { helpText = message; }
+  function closeHelp() { helpText = ''; }
+  function selectTab(tab: 'light' | 'color' | 'detail') { activeTab = tab; helpText = ''; }
+  function onTabKeydown(event: KeyboardEvent) {
+    const tabs: ('light' | 'color' | 'detail')[] = ['light', 'color', 'detail'];
+    const current = tabs.indexOf(activeTab);
+    let next = current;
+    if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (current + tabs.length - 1) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const tab = tabs[next];
+    selectTab(tab);
+    document.getElementById(`develop-tab-${tab}`)?.focus();
+  }
+  let exposureTenths = 0;
+  let contrastPercent = 0;
+  let shadowsPercent = 0;
+  let highlightsPercent = 0;
+  let blacksPercent = 0;
+  let whitesPercent = 0;
+  let warmthPercent = 0;
+  let tintPercent = 0;
+  let vibrancePercent = 0;
+  let saturationPercent = 0;
+  let clarityPercent = 0;
+  let texturePercent = 0;
+  type HslRow = { band: number; kind: number; name: string; ariaLabel: string; swatchClass: string; value: number; display: string };
+  const hslBandNames = ["Red", "Orange", "Yellow green", "Spring green", "Cyan", "Azure", "Violet", "Rose"];
+  const hslKindNames = ["Hue", "Saturation", "Luminance"];
+  const hslBands = hslBandNames.map((name, index) => ({ index, name, swatchClass: `hsl-swatch hsl-swatch-${index}` }));
+  let hslLayout = 'color';
+  let colorMode: 'groups' | 'picked' = 'picked';
+  let curvesOpen = false;
+  let moreColorOpen = false;
+  let gradeOpen = false;
+  function toggleCurves() { curvesOpen = !curvesOpen; if (curvesOpen) queueCurveDraw(); }
+  function toggleMoreColor() { moreColorOpen = !moreColorOpen; }
+  function toggleGrade() { gradeOpen = !gradeOpen; }
+  function gradingChanged(): boolean { return gradeValues.slice(0, 13).some(value => value !== 0); }
+  function selectColorMode(mode: 'groups' | 'picked') {
+    if (mode !== 'picked' && pickingColor) { void pickColorFromPhoto(0); pickingColor = false; }
+    if (mode !== 'picked' && showAffected) void showPickMask(0, gradeValues[13], gradeValues[14] || 20, gradeValues[15] || 50);
+    if (mode === 'picked' && showAffected) void updateAffected();
+    colorMode = mode;
+  }
+  let hslMode = 0;
+  let hslSelectedBand = 0;
+  let hslValues = Array(24).fill(0) as number[];
+  const gradingRanges = [{ index: 0, name: 'Shadows' }, { index: 1, name: 'Midtones' }, { index: 2, name: 'Highlights' }, { index: 3, name: 'Global' }];
+  let gradeRange = 0;
+  let pickingColor = false;
+  let showAffected = false;
+  async function updateAffected() {
+    await showPickMask(showAffected && colorMode === 'picked' ? 1 : 0,
+      gradeValues[13], gradeValues[14] || 20, gradeValues[15] || 50);
+  }
+  async function toggleAffected() {
+    showAffected = !showAffected;
+    await updateAffected();
+  }
+  async function startColorPick() {
+    const next = !pickingColor;
+    if (await pickColorFromPhoto(next ? 1 : 0)) { pickingColor = next; }
+  }
+  async function finishColorPick(hue: number) {
+    pickingColor = false;
+    if (!Number.isInteger(hue) || hue < 0 || hue >= 360 || opening) return;
+    const values = gradeValues.slice(); values[13] = hue; values[19] = 1; gradeValues = values;
+    const before = await documentSnapshot();
+    opening = true; status = 'Selecting color…';
+    try {
+      if (await submitAdjustment(5, 0, hue, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, 'Picked color');
+      else { status = 'Could not select color'; }
+    } catch (error) { status = (error as Error).message; }
+    finally { opening = false; await updateAffected(); }
+  }
+  let gradeValues = Array(20).fill(0) as number[];
+  let gradePointerId = -1;
+  let gradeDragStart = [0, 0];
+  let hslRows: HslRow[] = [];
+  let hslColorRows: HslRow[] = [];
+  type CurveRow = { id: string; name: string; help: string; value: number; neutral: number; display: string; min: number; max: number };
+  const curveChannels = [{ index: 3, name: 'Luma' }, { index: 0, name: 'Red' }, { index: 1, name: 'Green' }, { index: 2, name: 'Blue' }];
+  const curveNames = ['Shadows', 'Midtones', 'Highlights'];
+  let curveChannel = 3;
+  let curveValues = [250, 500, 750, 250, 500, 750, 250, 500, 750, 250, 500, 750];
+  function curvesChanged(): boolean { return curveValues.some((value, index) => value !== (index % 3 + 1) * 250); }
+  let curveRows: CurveRow[] = [];
+  let curvePoints: { x: number; y: number }[] = [];
+  let curveDrawQueued = false;
+  let curveDraggingPoint = -1;
+  let curvePointerId = -1;
+  let curveDragStartValue = 0;
+  let hslRefresh = 0;
+  function curveRowsFor(values: number[], channel: number): CurveRow[] {
+    return curveNames.map((name, point) => {
+      const offset = channel * 3 + point;
+      const value = values[offset];
+      return { id: `curve-${channel}-${point}`, name, help: `Sets the ${name.toLowerCase()} output of the ${channel === 3 ? 'luma' : ['red', 'green', 'blue'][channel]} curve.`,
+        value, neutral: (point + 1) * 250, display: `${(value / 10).toFixed(1)}%`, min: point === 0 ? 0 : values[offset - 1], max: point === 2 ? 1000 : values[offset + 1] };
+    });
+  }
+  function curvePointsFor(values: number[], channel: number) {
+    return [0, 1, 2].map(point => ({ x: (point + 1) * 50, y: 200 - values[channel * 3 + point] / 5 }));
+  }
+  function curveGraphLabel(): string { return `${curveChannels.find(channel => channel.index === curveChannel)?.name ?? 'Tone'} curve from black to white`; }
+  function smoothCurveOutput(outputs: number[], x: number): number {
+    const segment = Math.min(3, Math.floor(x * 4));
+    const slopes = [0, 1, 2, 3].map(i => (outputs[i + 1] - outputs[i]) * 4);
+    const tangent = (i: number): number => {
+      if (i === 0 || i === 4) {
+        const edge = i === 0 ? slopes[0] : slopes[3];
+        const neighbor = i === 0 ? slopes[1] : slopes[2];
+        return Math.max(0, Math.min(3 * edge, (3 * edge - neighbor) / 2));
+      }
+      const a = slopes[i - 1], b = slopes[i];
+      return a <= 0 || b <= 0 ? 0 : 2 * a * b / (a + b);
+    };
+    const t = x * 4 - segment, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * outputs[segment]
+      + (t3 - 2 * t2 + t) * tangent(segment) / 4
+      + (-2 * t3 + 3 * t2) * outputs[segment + 1]
+      + (t3 - t2) * tangent(segment + 1) / 4;
+  }
+  function drawCurveGraph() {
+    const canvas = document.getElementById('curve-graph') as HTMLCanvasElement | null;
+    const context = canvas?.getContext('2d');
+    if (!context) return;
+    context.clearRect(0, 0, 200, 200);
+    context.fillStyle = '#141b17'; context.fillRect(0, 0, 200, 200);
+    context.strokeStyle = '#344038'; context.lineWidth = 1;
+    for (const position of [50, 100, 150]) {
+      context.beginPath(); context.moveTo(position, 0); context.lineTo(position, 200); context.stroke();
+      context.beginPath(); context.moveTo(0, position); context.lineTo(200, position); context.stroke();
+    }
+    context.strokeStyle = '#647669'; context.setLineDash([3, 4]);
+    context.beginPath(); context.moveTo(0, 200); context.lineTo(200, 0); context.stroke();
+    context.setLineDash([]);
+    const color = ['#d77979', '#75bd87', '#7da4d8', '#e8eee3'][curveChannel];
+    context.strokeStyle = color; context.lineWidth = 2;
+    const outputs = [0, ...curveValues.slice(curveChannel * 3, curveChannel * 3 + 3).map(value => value / 1000), 1];
+    context.beginPath(); context.moveTo(0, 200);
+    for (let pixel = 1; pixel <= 200; pixel++)
+      context.lineTo(pixel, 200 * (1 - smoothCurveOutput(outputs, pixel / 200)));
+    context.stroke();
+    context.fillStyle = color; context.strokeStyle = '#e8eee3'; context.lineWidth = 1;
+    for (const point of curvePoints) {
+      context.beginPath(); context.arc(point.x, point.y, 6, 0, Math.PI * 2);
+      context.fill(); context.stroke();
+    }
+  }
+  function queueCurveGraph() {
+    if (curveDrawQueued) return;
+    curveDrawQueued = true;
+    requestAnimationFrame(() => { curveDrawQueued = false; drawCurveGraph(); });
+  }
+  function curveGraphPosition(event: PointerEvent): { x: number; y: number } {
+    const rect = (event.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * 200 / rect.width,
+      y: (event.clientY - rect.top) * 200 / rect.height };
+  }
+  function updateCurveFromPointer(event: PointerEvent) {
+    if (curveDraggingPoint < 0 || event.pointerId !== curvePointerId) return;
+    const y = curveGraphPosition(event).y;
+    const row = curveRowsFor(curveValues, curveChannel)[curveDraggingPoint];
+    const value = Math.max(row.min, Math.min(row.max, Math.round((200 - y) * 5)));
+    previewCurve({ id: row.id, value });
+  }
+  function startCurveDrag(event: PointerEvent) {
+    if (opening || curveDraggingPoint >= 0) return;
+    const position = curveGraphPosition(event);
+    const point = Math.round(position.x / 50) - 1;
+    if (point < 0 || point > 2 || Math.abs(position.x - (point + 1) * 50) > 14 ||
+      Math.abs(position.y - curvePoints[point].y) > 14) return;
+    curveDraggingPoint = point;
+    curvePointerId = event.pointerId;
+    curveDragStartValue = curveValues[curveChannel * 3 + point];
+    (event.currentTarget as HTMLCanvasElement).setPointerCapture(event.pointerId);
+    event.preventDefault();
+    updateCurveFromPointer(event);
+  }
+  function moveCurveDrag(event: PointerEvent) { updateCurveFromPointer(event); }
+  async function finishCurveDrag(event: PointerEvent) {
+    if (curveDraggingPoint < 0 || event.pointerId !== curvePointerId) return;
+    updateCurveFromPointer(event);
+    const point = curveDraggingPoint;
+    const value = curveValues[curveChannel * 3 + point];
+    curveDraggingPoint = -1;
+    curvePointerId = -1;
+    if ((event.currentTarget as HTMLCanvasElement).hasPointerCapture(event.pointerId))
+      (event.currentTarget as HTMLCanvasElement).releasePointerCapture(event.pointerId);
+    if (value !== curveDragStartValue)
+      await commitCurve({ id: `curve-${curveChannel}-${point}`, value });
+  }
+  function cancelCurveDrag(event: PointerEvent) {
+    if (curveDraggingPoint < 0 || event.pointerId !== curvePointerId) return;
+    previewCurve({ id: `curve-${curveChannel}-${curveDraggingPoint}`, value: curveDragStartValue });
+    curveDraggingPoint = -1;
+    curvePointerId = -1;
+  }
+  function selectCurveChannel(event: Event) {
+    const channel = Number((event.currentTarget as HTMLElement).dataset.channel);
+    if (!Number.isInteger(channel) || channel < 0 || channel > 3) return;
+    curveChannel = channel; curveRows = curveRowsFor(curveValues, channel); curvePoints = curvePointsFor(curveValues, channel);
+    queueCurveGraph();
+  }
+  function curveLocation(id: string): { channel: number; point: number } | undefined {
+    const match = /^curve-([0-3])-([0-2])$/.exec(id);
+    if (!match) return undefined;
+    return { channel: Number(match[1]), point: Number(match[2]) };
+  }
+  function previewCurve(change: SliderChange) {
+    const location = curveLocation(change.id);
+    if (!location) return;
+    const values = curveValues.slice(); values[location.channel * 3 + location.point] = change.value;
+    curveValues = values; curvePoints = curvePointsFor(values, curveChannel);
+    queueCurveGraph();
+  }
+  async function commitCurve(change: SliderChange) {
+    const location = curveLocation(change.id);
+    if (!location || !developAvailable) return;
+    previewCurve(change);
+    curveRows = curveRowsFor(curveValues, curveChannel);
+    ++latestEditToken;
+    const before = await documentSnapshot();
+    status = 'Updating RGB curve…';
+    try {
+      if (await submitAdjustment(2, location.channel * 3 + location.point, change.value, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, 'RGB curve');
+      else { status = 'Could not update RGB curve'; }
+    } catch (error) {
+      status = (error as Error).message;
+    }
+  }
+  async function stepCurve(change: SliderStep) {
+    const location = curveLocation(change.id);
+    if (!location) return;
+    const row = curveRowsFor(curveValues, location.channel)[location.point];
+    await commitCurve({ id: change.id, value: Math.max(row.min, Math.min(row.max, row.value + change.delta)) });
+  }
+  async function resetCurvePoint(id: string) {
+    const location = curveLocation(id);
+    if (!location) return;
+    const row = curveRowsFor(curveValues, location.channel)[location.point];
+    await commitCurve({ id, value: Math.max(row.min, Math.min(row.max, (location.point + 1) * 250)) });
+  }
+  function hslDisplay(value: number, kind: number): string {
+    return kind === 0 ? `${(value * 0.45).toFixed(1)}°` : `${value}%`;
+  }
+  function hslBandChanged(band: number): boolean {
+    return hslValues[band] !== 0 || hslValues[8 + band] !== 0 || hslValues[16 + band] !== 0;
+  }
+  function mixerRows(values: number[], mode: number): HslRow[] {
+    return hslBandNames.map((name, band) => {
+      const value = values[mode * 8 + band];
+      return { band, kind: mode, name, ariaLabel: `${name} ${hslKindNames[mode]}`,
+        swatchClass: `hsl-swatch hsl-swatch-${band}`,
+        value, display: hslDisplay(value, mode) };
+    });
+  }
+  function colorRows(values: number[], band: number): HslRow[] {
+    return hslKindNames.map((name, kind) => {
+      const value = values[kind * 8 + band];
+      return { band, kind, name, ariaLabel: `${hslBandNames[band]} ${name}`,
+        swatchClass: `hsl-swatch hsl-swatch-${band}`,
+        value, display: hslDisplay(value, kind) };
+    });
+  }
+  function selectHslLayout(layout: string) {
+    if (layout !== 'adjustment' && layout !== 'color') return;
+    hslLayout = layout;
+  }
+  function selectHslMode(mode: number) {
+    if (mode < 0 || mode > 2) return;
+    hslMode = mode;
+    hslRows = mixerRows(hslValues, mode);
+  }
+  function selectHslColor(event: Event) {
+    const band = hslBandFromEvent(event);
+    if (!Number.isInteger(band) || band < 0 || band > 7) return;
+    hslSelectedBand = band; hslColorRows = colorRows(hslValues, band);
+  }
+  async function refreshHslRows() {
+    if (!developAvailable) return;
+    const refresh = ++hslRefresh;
+    const values = await Promise.all(Array.from({ length: 24 }, (_, index) =>
+      hslValue(Math.floor(index / 8), index % 8)));
+    const curves = await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      curveValue(Math.floor(index / 3), index % 3)));
+    const grades = await Promise.all(Array.from({ length: 20 }, (_, index) => gradeValue(index)));
+    if (refresh !== hslRefresh) return;
+    hslValues = values; hslRows = mixerRows(values, hslMode); hslColorRows = colorRows(values, hslSelectedBand);
+    curveValues = curves; curveRows = curveRowsFor(curves, curveChannel); curvePoints = curvePointsFor(curves, curveChannel);
+    gradeValues = grades;
+    queueCurveGraph();
+  }
+  function hslBandFromEvent(event: Event): number {
+    return Number((event.currentTarget as HTMLElement).dataset.band);
+  }
+  type HslChange = { band: number; kind: number; value: number };
+  type HslStep = { band: number; kind: number; delta: number };
+  type HslTarget = { band: number; kind: number };
+  function validHslTarget(band: number, kind: number): boolean {
+    return Number.isInteger(band) && band >= 0 && band <= 7 && Number.isInteger(kind) && kind >= 0 && kind <= 2;
+  }
+  function previewHslRow({ band, kind, value }: HslChange) {
+    if (!validHslTarget(band, kind)) return;
+    const values = hslValues.slice(); values[kind * 8 + band] = value;
+    hslValues = values;
+  }
+  async function commitHsl(kind: number, band: number, percent: number) {
+    if (!developAvailable) return;
+    previewHslRow({ kind, band, value: percent });
+    hslRows = mixerRows(hslValues, hslMode);
+    hslColorRows = colorRows(hslValues, hslSelectedBand);
+    ++latestEditToken;
+    const before = await documentSnapshot();
+    status = "Updating color band…";
+    try {
+      if (await submitAdjustment(1, kind * 8 + band, percent, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, "Color band");
+      else { status = "Could not update color band"; }
+    } catch (error) {
+      status = (error as Error).message;
+    }
+  }
+  async function commitHslRow({ band, kind, value }: HslChange) {
+    if (!validHslTarget(band, kind)) return;
+    await commitHsl(kind, band, value);
+  }
+  async function stepHslRow({ band, kind, delta }: HslStep) {
+    if (!validHslTarget(band, kind)) return;
+    const current = hslValues[kind * 8 + band];
+    await commitHsl(kind, band, Math.max(-100, Math.min(100, current + delta)));
+  }
+  async function resetHslRow({ band, kind }: HslTarget) {
+    if (!validHslTarget(band, kind)) return;
+    await commitHsl(kind, band, 0);
+  }
+  function selectGradeRange(event: Event) {
+    const range = Number((event.currentTarget as HTMLElement).dataset.range);
+    if (Number.isInteger(range) && range >= 0 && range < 4) { gradeRange = range; }
+  }
+  function gradeWheelLabel(): string {
+    return `${gradeValues[gradeRange * 3]}° hue, ${gradeValues[gradeRange * 3 + 1]}% strength`;
+  }
+  function gradeWheelHandleStyle(): string {
+    const angle = gradeValues[gradeRange * 3] * Math.PI / 180;
+    const radius = gradeValues[gradeRange * 3 + 1] * 0.46;
+    return `left: ${50 + Math.cos(angle) * radius}%; top: ${50 + Math.sin(angle) * radius}%`;
+  }
+  function gradeField(id: string): number {
+    const match = /^grade-(\d+)$/.exec(id);
+    const field = match ? Number(match[1]) : -1;
+    return field >= 0 && field < 20 ? field : -1;
+  }
+  function previewGrade(change: SliderChange) {
+    const field = gradeField(change.id);
+    if (field < 0) return;
+    const values = gradeValues.slice(); values[field] = change.value; gradeValues = values;
+    if (field >= 13 && field <= 15 && showAffected) void updateAffected();
+  }
+  async function commitGrade(change: SliderChange) {
+    const field = gradeField(change.id);
+    if (field < 0 || !developAvailable) return;
+    previewGrade(change);
+    ++latestEditToken;
+    const before = await documentSnapshot();
+    status = 'Updating color…';
+    try {
+      if (await submitAdjustment(3, field, change.value, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, 'Color');
+      else { status = 'Could not update color'; }
+    } catch (error) { status = (error as Error).message; }
+    finally { await updateAffected(); }
+  }
+  async function stepGrade(change: SliderStep) {
+    const field = gradeField(change.id);
+    if (field < 0) return;
+    const maximum = field === 13 || (field < 12 && field % 3 === 0) ? 359 : field === 14 ? 90 : 100;
+    const minimum = field === 14 ? 2 : field === 15 ? 1 : field === 12 || field === 16 || field === 17 || field === 18 || (field < 12 && field % 3 === 2) ? -100 : 0;
+    const current = field === 14 ? gradeValues[field] || 20 : field === 15 ? gradeValues[field] || 50 : gradeValues[field];
+    await commitGrade({ id: change.id, value: Math.max(minimum, Math.min(maximum, current + change.delta)) });
+  }
+  async function resetGrade(id: string) { await commitGrade({ id, value: 0 }); }
+  async function togglePickedColor() { await commitGrade({ id: 'grade-19', value: gradeValues[19] === 1 ? 0 : 1 }); }
+  function gradeWheelPosition(event: PointerEvent): [number, number] {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const dx = event.clientX - rect.left - rect.width / 2;
+    const dy = event.clientY - rect.top - rect.height / 2;
+    const hue = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360) % 360;
+    const strength = Math.max(0, Math.min(100, Math.round(Math.hypot(dx, dy) / (rect.width * 0.46) * 100)));
+    return [hue, strength];
+  }
+  function updateGradeWheel(event: PointerEvent) {
+    if (event.pointerId !== gradePointerId) return;
+    const [hue, strength] = gradeWheelPosition(event);
+    const values = gradeValues.slice(); values[gradeRange * 3] = hue;
+    values[gradeRange * 3 + 1] = strength; gradeValues = values;
+  }
+  function startGradeWheel(event: PointerEvent) {
+    if (!developAvailable || gradePointerId >= 0) return;
+    gradeDragStart = [gradeValues[gradeRange * 3], gradeValues[gradeRange * 3 + 1]];
+    gradePointerId = event.pointerId;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    event.preventDefault();
+    updateGradeWheel(event);
+  }
+  function moveGradeWheel(event: PointerEvent) { updateGradeWheel(event); }
+  async function finishGradeWheel(event: PointerEvent) {
+    if (event.pointerId !== gradePointerId) return;
+    updateGradeWheel(event);
+    gradePointerId = -1;
+    const [hue, strength] = [gradeValues[gradeRange * 3], gradeValues[gradeRange * 3 + 1]];
+    if (hue === gradeDragStart[0] && strength === gradeDragStart[1]) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+    status = 'Updating color grading…';
+    try {
+      if (await submitAdjustment(4, gradeRange, hue, strength)) scheduleEditCompletion(before.committedGeneration, before.editRevision, 'Color grading');
+      else { status = 'Could not update color grading'; }
+    } catch (error) { status = (error as Error).message; }
+
+  }
+  function cancelGradeWheel(event: PointerEvent) {
+    if (event.pointerId !== gradePointerId) return;
+    gradePointerId = -1;
+    const values = gradeValues.slice(); values[gradeRange * 3] = gradeDragStart[0];
+    values[gradeRange * 3 + 1] = gradeDragStart[1]; gradeValues = values;
+  }
+  function gradeWheelKeydown(event: KeyboardEvent) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowRight' ? 5 : -5;
+      void commitGrade({ id: `grade-${gradeRange * 3}`, value: (gradeValues[gradeRange * 3] + delta + 360) % 360 });
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowUp' ? 5 : -5;
+      void commitGrade({ id: `grade-${gradeRange * 3 + 1}`, value: Math.max(0, Math.min(100, gradeValues[gradeRange * 3 + 1] + delta)) });
+    }
+  }
+  type SliderChange = { id: string; value: number };
+  type SliderStep = { id: string; delta: number };
+  function controlValue(id: string): number {
+    switch (id) {
+      case 'exposure': return exposureTenths;
+      case 'contrast': return contrastPercent;
+      case 'shadows': return shadowsPercent;
+      case 'highlights': return highlightsPercent;
+      case 'blacks': return blacksPercent;
+      case 'whites': return whitesPercent;
+      case 'warmth': return warmthPercent;
+      case 'tint': return tintPercent;
+      case 'vibrance': return vibrancePercent;
+      case 'saturation': return saturationPercent;
+      case 'clarity': return clarityPercent;
+      case 'texture': return texturePercent;
+      default: return 0;
+    }
+  }
+  function previewControl(change: SliderChange) {
+    switch (change.id) {
+      case 'exposure': exposureTenths = change.value; break;
+      case 'contrast': contrastPercent = change.value; break;
+      case 'shadows': shadowsPercent = change.value; break;
+      case 'highlights': highlightsPercent = change.value; break;
+      case 'blacks': blacksPercent = change.value; break;
+      case 'whites': whitesPercent = change.value; break;
+      case 'warmth': warmthPercent = change.value; break;
+      case 'tint': tintPercent = change.value; break;
+      case 'vibrance': vibrancePercent = change.value; break;
+      case 'saturation': saturationPercent = change.value; break;
+      case 'clarity': clarityPercent = change.value; break;
+      case 'texture': texturePercent = change.value; break;
+    }
+  }
+  async function commitControlChange(change: SliderChange) {
+    previewControl(change);
+    switch (change.id) {
+      case 'exposure': await commitExposure(change.value); break;
+      case 'contrast': await commitContrast(change.value); break;
+      case 'shadows': case 'highlights': case 'blacks': case 'whites': {
+        const control = toneControl(change.id);
+        if (control !== undefined) await commitTone(control, change.value);
+        break;
+      }
+      case 'warmth': case 'tint': case 'vibrance': case 'saturation': {
+        const control = colorControl(change.id);
+        if (control !== undefined) await commitColor(control, change.value);
+        break;
+      }
+      case 'clarity': await commitDetail(change.value); break;
+      case 'texture': await commitTexture(change.value); break;
+    }
+  }
+  async function stepControl(change: SliderStep) {
+    const limits = change.id === 'exposure' ? 40 : 100;
+    await commitControlChange({ id: change.id, value: Math.max(-limits, Math.min(limits, controlValue(change.id) + change.delta)) });
+  }
+  async function resetControl(id: string) { await commitControlChange({ id, value: 0 }); }
+  let developAvailable = false;
+  let canUndo = false;
+  let canRedo = false;
+  let historyLength = 0;
+  let historyCursor = 0;
+  let status = '';
+  let detachPreview: (() => void) | undefined;
+  let detachNavigator: (() => void) | undefined;
+  let detachFilmstrip: (() => void) | undefined;
+  let detachHistogram: (() => void) | undefined;
+  function toneControl(id: string): ToneControl | undefined { return toneControls[id as ToneControlName]; }
+  function historyPosition() { return historyLength <= 1 ? "Original photograph" : historyCursor === 0 ? `Original · ${historyLength - 1} edits` : `Edit ${historyCursor} of ${historyLength - 1}`; }
+  function lightChanged() { return exposureTenths !== 0 || contrastPercent !== 0 || shadowsPercent !== 0 || highlightsPercent !== 0 || blacksPercent !== 0 || whitesPercent !== 0; }
+  function colorChanged() { return warmthPercent !== 0 || tintPercent !== 0 || vibrancePercent !== 0 || saturationPercent !== 0; }
+  const COLOR_WARMTH = 0;
+  const COLOR_TINT = 1;
+  const COLOR_VIBRANCE = 2;
+  const COLOR_SATURATION = 3;
+  const TONE_SHADOWS = 1;
+  const TONE_HIGHLIGHTS = 2;
+  const TONE_BLACKS = 3;
+  const TONE_WHITES = 4;
+  const PHASE_OPENING = 1;
+  const PROJECT_SAVING = 1;
+  const PROJECT_SAVED = 2;
+  const PROJECT_CANCELLED = 3;
+  const PROJECT_CHANGED_SOURCE = 5;
+  type ColorControl = typeof COLOR_WARMTH | typeof COLOR_TINT | typeof COLOR_VIBRANCE | typeof COLOR_SATURATION;
+  type ToneControl = typeof TONE_SHADOWS | typeof TONE_HIGHLIGHTS | typeof TONE_BLACKS | typeof TONE_WHITES;
+  type ColorControlName = 'warmth' | 'tint' | 'vibrance' | 'saturation';
+  type ToneControlName = 'shadows' | 'highlights' | 'blacks' | 'whites';
+  const colorControls: Record<ColorControlName, ColorControl> = { warmth: COLOR_WARMTH, tint: COLOR_TINT, vibrance: COLOR_VIBRANCE, saturation: COLOR_SATURATION };
+  const toneControls: Record<ToneControlName, ToneControl> = { shadows: TONE_SHADOWS, highlights: TONE_HIGHLIGHTS, blacks: TONE_BLACKS, whites: TONE_WHITES };
+  function colorControl(id: string): ColorControl | undefined { return colorControls[id as ColorControlName]; }
+  function colorName(control: ColorControl) { return control === COLOR_WARMTH ? "Warmth" : control === COLOR_TINT ? "Tint" : control === COLOR_VIBRANCE ? "Vibrance" : "Saturation"; }
+  async function commitColor(control: ColorControl, next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+    const current = control === COLOR_WARMTH ? before.warmthPercent : control === COLOR_TINT ? before.tintPercent : control === COLOR_VIBRANCE ? before.vibrancePercent : before.saturationPercent;
+
+    const name = colorName(control);
+    status = `Updating ${name.toLowerCase()}…`;
+    try {
+      if (await submitAdjustment(0, control + 6, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, name);
+      else { warmthPercent = before.warmthPercent; tintPercent = before.tintPercent; vibrancePercent = before.vibrancePercent; saturationPercent = before.saturationPercent; status = `Could not update ${name.toLowerCase()}`; }
+    } catch (error) {
+      warmthPercent = before.warmthPercent; tintPercent = before.tintPercent; vibrancePercent = before.vibrancePercent; saturationPercent = before.saturationPercent; status = (error as Error).message;
+    }
+  }
+  async function resetColor() {
+    if (opening || !developAvailable || !colorChanged()) return;
+    const before = await documentSnapshot();
+    opening = true; status = "Resetting color…";
+    try { if (await resetColorCommand()) await followOpen(before.committedGeneration, before.editRevision, "Color"); }
+    catch (error) { status = (error as Error).message; }
+    finally { opening = false; }
+  }
+  async function commitDetail(next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+
+    status = "Updating clarity…";
+    try {
+      if (await submitAdjustment(0, 10, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, "Clarity");
+      else { clarityPercent = before.clarityPercent; status = "Could not update clarity"; }
+    } catch (error) { clarityPercent = before.clarityPercent; status = (error as Error).message; }
+
+  }
+  async function commitTexture(next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+
+    status = "Updating texture…";
+    try {
+      if (await submitAdjustment(0, 11, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, "Texture");
+      else { texturePercent = before.texturePercent; status = "Could not update texture"; }
+    } catch (error) { texturePercent = before.texturePercent; status = (error as Error).message; }
+
+  }
+  async function resetDetail() {
+    if (opening || !developAvailable || (clarityPercent === 0 && texturePercent === 0)) return;
+    const before = await documentSnapshot();
+    opening = true; status = "Resetting detail…";
+    try { if (await resetDetailCommand()) await followOpen(before.committedGeneration, before.editRevision, "Detail"); }
+    catch (error) { status = (error as Error).message; }
+    finally { opening = false; }
+  }
+  function exposureLabel() { return `${(exposureTenths / 10).toFixed(1)} EV`; }
+  function contrastLabel() { return `${contrastPercent > 0 ? "+" : ""}${contrastPercent}`; }
+  function toneLabel(value: number) { return `${value > 0 ? "+" : ""}${value}`; }
+  async function commitTone(control: ToneControl, next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+
+    const name = control === TONE_SHADOWS ? "Shadows" : control === TONE_HIGHLIGHTS ? "Highlights" : control === TONE_BLACKS ? "Blacks" : "Whites";
+    status = `Updating ${name.toLowerCase()}…`;
+    try {
+      if (await submitAdjustment(0, control + 1, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, name);
+      else { shadowsPercent = before.shadowsPercent; highlightsPercent = before.highlightsPercent; blacksPercent = before.blacksPercent; whitesPercent = before.whitesPercent; status = `Could not update ${name.toLowerCase()}`; }
+    } catch (error) {
+      shadowsPercent = before.shadowsPercent; highlightsPercent = before.highlightsPercent; blacksPercent = before.blacksPercent; whitesPercent = before.whitesPercent; status = (error as Error).message;
+    }
+  }
+  async function commitExposure(next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+
+    status = "Updating exposure…";
+    try {
+      if (await submitAdjustment(0, 0, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, "Exposure");
+      else { exposureTenths = before.exposureTenths; status = "Could not update exposure"; }
+    } catch (error) {
+      exposureTenths = before.exposureTenths; status = (error as Error).message;
+    }
+  }
+  async function commitContrast(next: number) {
+    if (!developAvailable) return;
+    ++latestEditToken;
+    const before = await documentSnapshot();
+
+    status = "Updating contrast…";
+    try {
+      if (await submitAdjustment(0, 1, next, 0)) scheduleEditCompletion(before.committedGeneration, before.editRevision, "Contrast");
+      else { contrastPercent = before.contrastPercent; status = "Could not update contrast"; }
+    } catch (error) {
+      contrastPercent = before.contrastPercent; status = (error as Error).message;
+    }
+  }
+  function failureMessage(code: number) {
+    switch (code) {
+      case 1: return "Could not read this photograph";
+      case 2: return "This RAW variant is not supported yet";
+      case 3: return "Photograph exceeds the current size limit";
+      case 4: return "Invalid photograph data or preview geometry";
+      case 5: return "Could not render this photograph";
+      case 6: return "This file is not a supported RAW photo";
+      case 8: return "The original photograph has changed or is missing";
+      case 9: return "This project file is invalid";
+      case 10: return "Could not read this project";
+      case 11: return "This project's render version is unavailable";
+      default: return "Open cancelled";
+    }
+  }
+  async function attachPreview() {
+    detachPreview?.();
+    detachPreview = undefined;
+    if (await showPreview()) {
+      const slot = document.getElementById("photo-preview");
+      if (slot) detachPreview = attachNativeSlot(slot, "photo_preview");
+    }
+    detachNavigator?.();
+    detachNavigator = undefined;
+    if (await showNavigatorPreview()) {
+      const slot = document.getElementById("navigator-preview");
+      if (slot) detachNavigator = attachNativeSlot(slot, "navigator_preview");
+    }
+    detachFilmstrip?.();
+    detachFilmstrip = undefined;
+    if (await showFilmstripPreview()) {
+      const slot = document.getElementById("filmstrip-preview");
+      if (slot) detachFilmstrip = attachNativeSlot(slot, "filmstrip_preview");
+    }
+    detachHistogram?.();
+    detachHistogram = undefined;
+    if (await showHistogram()) {
+      const slot = document.getElementById("histogram-preview");
+      if (slot) detachHistogram = attachNativeSlot(slot, "histogram_preview");
+    }
+  }
+  // Reserve submissions in UI order. A native render may still be pending when the
+  // next command is accepted; set_adjustment composes it with that pending recipe.
+  type AdjustmentRequest = { family: number; index: number; value: number; other: number };
+  const developControlNames = ['Exposure', 'Contrast', 'Shadows', 'Highlights', 'Blacks', 'Whites', 'Warmth', 'Tint', 'Vibrance', 'Saturation', 'Clarity', 'Texture'];
+  let adjustmentQueue: Promise<void> = Promise.resolve();
+  let pendingBatch: AdjustmentRequest[] = [];
+  let failedBatch: AdjustmentRequest[] = [];
+  type DocumentSnapshot = Awaited<ReturnType<typeof documentSnapshot>>;
+  function restoreScalarControls(snapshot: DocumentSnapshot) {
+    exposureTenths = snapshot.exposureTenths; contrastPercent = snapshot.contrastPercent;
+    shadowsPercent = snapshot.shadowsPercent; highlightsPercent = snapshot.highlightsPercent;
+    blacksPercent = snapshot.blacksPercent; whitesPercent = snapshot.whitesPercent;
+    warmthPercent = snapshot.warmthPercent; tintPercent = snapshot.tintPercent;
+    vibrancePercent = snapshot.vibrancePercent; saturationPercent = snapshot.saturationPercent;
+    clarityPercent = snapshot.clarityPercent; texturePercent = snapshot.texturePercent;
+  }
+  function batchFailureMessage() {
+    if (failedBatch.length === 0) return 'Preview could not update. The last completed image is shown.';
+    const names = [...new Set(failedBatch.map(request => {
+      if (request.family === 0) return developControlNames[request.index] || 'Adjustment';
+      if (request.family === 1) return `${hslBandNames[request.index % 8]} ${hslKindNames[Math.floor(request.index / 8)].toLowerCase()}`;
+      if (request.family === 2) return 'Tone curve';
+      if (request.family === 5) return 'Picked color';
+      return 'Color grade';
+    }))];
+    const subject = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+    return `${subject} could not render. The last completed image is shown.`;
+  }
+  function rememberAdjustment(request: AdjustmentRequest) {
+    pendingBatch = [...pendingBatch.filter(item => item.family !== request.family || item.index !== request.index), request];
+  }
+  function submitAdjustment(family: number, index: number, value: number, other: number): Promise<boolean> {
+    const submissionToken = latestEditToken;
+    const command = adjustmentQueue.then(() => setAdjustment(family, index, value, other));
+    adjustmentQueue = command.then(() => {}, () => {});
+    void command.then(accepted => {
+      if (accepted) rememberAdjustment({ family, index, value, other });
+      else void settleRejectedAdjustment(submissionToken);
+    }, () => { void settleRejectedAdjustment(submissionToken); });
+    return command;
+  }
+  let latestEditToken = 0;
+  async function settleRejectedAdjustment(token: number) {
+    while (token === latestEditToken) {
+      let snapshot: Awaited<ReturnType<typeof documentSnapshot>>;
+      try { snapshot = await documentSnapshot(); }
+      catch { if (token === latestEditToken) rendering = false; return; }
+      if (token !== latestEditToken) return;
+      if (snapshot.phase !== PHASE_OPENING) {
+        rendering = false;
+        restoreScalarControls(snapshot);
+        if (snapshot.hasPhoto && snapshot.exposureAvailable) await refreshHslRows();
+        if (token !== latestEditToken) return;
+        if (snapshot.failureCode !== 0 && pendingBatch.length > 0) {
+          failedBatch = pendingBatch;
+          pendingBatch = [];
+          previewFailure = batchFailureMessage();
+          applyChosenBatch(failedBatch);
+        } else pendingBatch = [];
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 16));
+    }
+  }
+  function scheduleEditCompletion(previousCommitted: number, previousRevision: number, action: string) {
+    ++hslRefresh;
+    previewFailure = '';
+    rendering = true;
+    void settleEdit(previousCommitted, previousRevision, action, ++latestEditToken);
+  }
+  function applyChosenBatch(batch: AdjustmentRequest[]) {
+    const controlIds = developControlNames.map(name => name.toLowerCase());
+    const chosenHsl = hslValues.slice();
+    const chosenCurve = curveValues.slice();
+    const chosenGrade = gradeValues.slice();
+    for (const request of batch) {
+      if (request.family === 0 && request.index < controlIds.length) previewControl({ id: controlIds[request.index], value: request.value });
+      else if (request.family === 1 && request.index < chosenHsl.length) chosenHsl[request.index] = request.value;
+      else if (request.family === 2 && request.index < chosenCurve.length) chosenCurve[request.index] = request.value;
+      else if (request.family === 3 && request.index < chosenGrade.length) chosenGrade[request.index] = request.value;
+      else if (request.family === 4 && request.index < 4) {
+        chosenGrade[request.index * 3] = request.value;
+        chosenGrade[request.index * 3 + 1] = request.other;
+      } else if (request.family === 5) {
+        chosenGrade[13] = request.value;
+        chosenGrade[19] = 1;
+      }
+    }
+    hslValues = chosenHsl; hslRows = mixerRows(chosenHsl, hslMode); hslColorRows = colorRows(chosenHsl, hslSelectedBand);
+    curveValues = chosenCurve; curveRows = curveRowsFor(chosenCurve, curveChannel); curvePoints = curvePointsFor(chosenCurve, curveChannel);
+    gradeValues = chosenGrade;
+    queueCurveGraph();
+  }
+  async function retryPreview() {
+    if (!failedBatch.length || rendering || opening) return;
+    const requests = failedBatch.slice();
+    ++latestEditToken;
+    rendering = true; previewFailure = '';
+    try {
+      const before = await documentSnapshot();
+      for (const request of requests) {
+        if (!await setAdjustment(request.family, request.index, request.value, request.other)) throw new Error('Could not retry preview');
+      }
+      pendingBatch = requests;
+      failedBatch = [];
+      scheduleEditCompletion(before.committedGeneration, before.editRevision, 'Preview');
+    } catch {
+      try { await cancelOpen(); } catch {}
+      rendering = false;
+      failedBatch = requests;
+      status = '';
+      previewFailure = batchFailureMessage();
+    }
+  }
+  async function discardFailedPreview() {
+    if (!failedBatch.length || rendering || opening) return;
+    const snapshot = await documentSnapshot();
+    failedBatch = [];
+    previewFailure = '';
+    status = '';
+    restoreScalarControls(snapshot);
+    await refreshHslRows();
+  }
+  async function followOpen(previousCommitted: number, previousRevision: number, action = "") {
+    await settleEdit(previousCommitted, previousRevision, action, ++latestEditToken);
+  }
+  async function settleEdit(previousCommitted: number, previousRevision: number, action: string, token: number) {
+    for (;;) {
+      if (token !== latestEditToken) return;
+      const snapshot = await documentSnapshot();
+      if (snapshot.phase !== PHASE_OPENING) {
+        if (token !== latestEditToken) return;
+        const changed = snapshot.committedGeneration !== previousCommitted;
+        rendering = false;
+        if (changed) { pendingBatch = []; failedBatch = []; }
+        else if (action !== '' && snapshot.failureCode !== 0 && pendingBatch.length > 0) {
+          failedBatch = pendingBatch;
+          pendingBatch = [];
+        } else pendingBatch = [];
+        hasPhoto = snapshot.hasPhoto;
+        photoName = snapshot.hasPhoto ? snapshot.sourceName : '';
+        canUndo = snapshot.canUndo; canRedo = snapshot.canRedo; historyLength = snapshot.historyLength; historyCursor = snapshot.historyCursor;
+        developAvailable = snapshot.exposureAvailable;
+        restoreScalarControls(snapshot);
+        status = changed ? '' : snapshot.failureCode !== 0 ? failureMessage(snapshot.failureCode) : action === '' ? "Open cancelled" : "Preview unchanged";
+        if (failedBatch.length > 0) status = '';
+        if (!changed && action !== '' && snapshot.failureCode !== 0) previewFailure = batchFailureMessage();
+        else if (failedBatch.length === 0) previewFailure = '';
+        if (changed && (!detachPreview || !detachNavigator || !detachFilmstrip || !detachHistogram)) await attachPreview();
+        if (snapshot.hasPhoto && snapshot.exposureAvailable) await refreshHslRows();
+        if (failedBatch.length > 0) applyChosenBatch(failedBatch);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 16));
+    }
+  }
+  async function resetLight() {
+    if (opening || !developAvailable || !lightChanged()) return;
+    const before = await documentSnapshot();
+    opening = true; status = "Resetting light…";
+    try {
+      if (await resetLightCommand()) await followOpen(before.committedGeneration, before.editRevision, "Light");
+      else { status = "Could not reset light"; }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally { opening = false; }
+  }
+  async function moveHistory(command: () => Promise<boolean>, label: string) {
+    if (opening || !developAvailable) return;
+    const before = await documentSnapshot();
+    opening = true; status = `${label}…`;
+    try {
+      if (await command()) {
+        await followOpen(before.committedGeneration, before.editRevision, label);
+        const after = await documentSnapshot();
+        if (after.committedGeneration !== before.committedGeneration) status = `${label} restored`;
+      }
+      else { status = `Could not ${label.toLowerCase()}`; }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally {
+      opening = false;
+    }
+  }
+  async function undo() { await moveHistory(undoEdit, "Earlier edit"); }
+  async function redo() { await moveHistory(redoEdit, "Later edit"); }
+  async function cancel() {
+    await cancelOpen();
+  }
+  async function newWindow() {
+    if (!await createWindow()) { status = "Could not open a new window"; }
+  }
+  documentSnapshot().then(async snapshot => {
+    hasPhoto = snapshot.hasPhoto; photoName = snapshot.hasPhoto ? snapshot.sourceName : ''; canUndo = snapshot.canUndo; canRedo = snapshot.canRedo; historyLength = snapshot.historyLength; historyCursor = snapshot.historyCursor; developAvailable = snapshot.exposureAvailable; exposureTenths = snapshot.exposureTenths; contrastPercent = snapshot.contrastPercent; shadowsPercent = snapshot.shadowsPercent; highlightsPercent = snapshot.highlightsPercent;
+    blacksPercent = snapshot.blacksPercent;
+    whitesPercent = snapshot.whitesPercent;
+    warmthPercent = snapshot.warmthPercent; tintPercent = snapshot.tintPercent; vibrancePercent = snapshot.vibrancePercent; saturationPercent = snapshot.saturationPercent; clarityPercent = snapshot.clarityPercent; texturePercent = snapshot.texturePercent; status = snapshot.failureCode ? failureMessage(snapshot.failureCode) : '';
+    if (snapshot.hasPhoto) { await attachPreview(); await refreshHslRows(); }
+    if (snapshot.phase === PHASE_OPENING) {
+      opening = true; cancellableOpening = true; status = "Opening…";
+      try { await followOpen(snapshot.committedGeneration, snapshot.editRevision); }
+      finally { opening = false; cancellableOpening = false; }
+    }
+  });
+  async function open() {
+    if (opening) return;
+    opening = true; cancellableOpening = true; status = "Opening…";
+    try {
+      const before = await documentSnapshot();
+      const scheduled = await openPhoto({ deadlineMs: 30000 });
+      if (scheduled) await followOpen(before.committedGeneration, before.editRevision);
+      else {
+        const snapshot = await documentSnapshot();
+        hasPhoto = snapshot.hasPhoto; status = failureMessage(snapshot.failureCode);
+      }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally {
+      opening = false; cancellableOpening = false;
+    }
+  }
+  async function openProject() {
+    if (opening || saving) return;
+    opening = true; cancellableOpening = true; status = "Opening project…";
+    try {
+      const before = await documentSnapshot();
+      if (await openSavedProject()) {
+        await followOpen(before.committedGeneration, before.editRevision);
+        const after = await documentSnapshot();
+        if (after.committedGeneration !== before.committedGeneration) status = "Project opened";
+      } else { status = "Could not start project open"; }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally { opening = false; cancellableOpening = false; }
+  }
+  async function saveProject() {
+    if (opening || saving || !developAvailable) return;
+    saving = true; status = "Choose where to save the project…";
+    try {
+      if (!await saveCurrentProject()) {
+        status = "Could not start project save";
+        return;
+      }
+      for (;;) {
+        const snapshot = await documentSnapshot();
+        if (snapshot.projectStatus !== PROJECT_SAVING) {
+          const message = snapshot.projectStatus === PROJECT_SAVED ? "Project saved" :
+            snapshot.projectStatus === PROJECT_CANCELLED ? "Save cancelled" :
+            snapshot.projectStatus === PROJECT_CHANGED_SOURCE ? "Original photograph changed; project was not saved" :
+            "Could not save project";
+          status = message;
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally { saving = false; }
+  }
+  async function exportTiff() {
+    if (opening || saving || exporting || !developAvailable) return;
+    exporting = true; status = "Choose where to export the TIFF…";
+    try {
+      if (!await startTiffExport()) {
+        status = "Could not start TIFF export";
+        return;
+      }
+      for (;;) {
+        const result = await exportStatus();
+        if (result === 6) { status = "Rendering full-resolution TIFF…"; }
+        if (result !== 1 && result !== 6) {
+          const message = result === 2 ? "Full-resolution TIFF exported" :
+            result === 3 ? "Export cancelled" :
+            result === 5 ? "Original photograph changed; TIFF was not exported" :
+            "Could not export TIFF";
+          status = message;
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    } catch (error) {
+      status = (error as Error).message;
+    } finally { exporting = false; }
+  }
+  async function cancelTiffExport() { await cancelExport(); }
+</script>
+<style>
+  * { box-sizing: border-box; }
+  :global(html), :global(body) { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #171c1a; }
+  .app { height: 100vh; width: 100%; display: flex; flex-direction: column; overflow: hidden; background: #171c1a; color: #d8ded7; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .45; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #d2e5bd; outline-offset: 2px; }
+  .topbar { height: 52px; flex: 0 0 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 17px; border-bottom: 1px solid #303832; background: #171c19; }
+  .identity { min-width: 0; display: flex; align-items: center; gap: 15px; }
+  .brand { font-size: 18px; font-weight: 650; letter-spacing: .21em; color: #e9eee5; }
+  .photo-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9ead9e; font-size: 11px; }
+  .header-actions { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .header-status { min-width: 0; max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #aebead; font-size: 11px; }
+  .open-button, .quiet-button { border-radius: 4px; padding: 7px 11px; font-size: 11px; }
+  .open-button { border: 1px solid #bfd1ad; background: #c5d5b5; color: #1d291e; font-weight: 600; }
+  .open-button:hover:enabled { background: #d5e1ca; }
+  .quiet-button { border: 1px solid #3b4740; background: #252d28; color: #c9d3c8; }
+  .quiet-button:hover:enabled { background: #334037; }
+  .workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 170px minmax(320px, 1fr) 285px; }
+  .navigator { min-width: 0; padding: 13px 10px; border-right: 1px solid #303832; background: #1a201c; }
+  .section-heading, .group-heading { margin: 0; font-size: 12px; font-weight: 600; color: #d8e0d2; }
+  .section-heading { margin: 0 2px 12px; }
+  .navigator-frame { position: relative; aspect-ratio: 1.48; border: 1px solid #39453d; border-radius: 4px; background: #101512; display: grid; place-items: center; overflow: hidden; color: #748679; font-size: 10px; }
+  .navigator-preview { position: absolute; inset: 0; }
+  .source-note { margin: 9px 1px 16px; color: #738979; font-size: 9px; line-height: 1.4; letter-spacing: .04em; }
+  .navigator-group { padding-top: 14px; }
+  .navigator-group h3 { margin: 0 3px 10px; color: #839787; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; }
+  .edits-group { margin-top: 18px; border-top: 1px solid #354139; }
+  .edit-position { margin: 3px 3px 10px; color: #b7c9b5; font-size: 11px; }
+  .edit-actions { display: flex; gap: 6px; padding: 0 3px; }
+  .edit-actions button { flex: 1; min-width: 0; padding: 6px 4px; font-size: 10px; }
+  .editor { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #101411; }
+  .crop-panel { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; padding: 9px 12px; background: #1b221ef2; color: #dce4d8; border: 1px solid #596653; border-radius: 7px; font-size: 11px; z-index: 2; }
+  .crop-panel label { display: flex; align-items: center; gap: 6px; }
+  .crop-panel select { background: #29362c; color: #edf3e9; border: 1px solid #657963; border-radius: 4px; padding: 4px; }
+  .crop-panel button { background: #354837; color: #edf3e9; border: 1px solid #657963; border-radius: 4px; padding: 5px 9px; }
+  .color-methods { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin: 18px 0 8px; padding: 2px; border: 1px solid #3c4c40; border-radius: 5px; background: #141b17; }
+  .color-methods button { min-width: 0; padding: 8px 2px; border: 0; border-radius: 3px; color: #9cad9c; background: transparent; font-size: 10px; }
+  .color-methods button.selected { color: #e4efdc; background: #354735; }
+  .color-methods button:focus-visible { outline: 2px solid #c6d8b6; outline-offset: 2px; }
+  .hsl-editor { margin-top: 8px; padding-top: 8px; }
+  .hsl-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .hsl-view-label { color: #9db39c; font-size: 10px; }
+  .hsl-layouts { display: flex; align-items: center; padding: 2px; border: 1px solid #3c4c40; border-radius: 5px; background: #141b17; }
+  .hsl-layouts button { display: grid; place-items: center; width: 28px; height: 24px; padding: 0; border: 0; border-radius: 3px; color: #aabbab; background: transparent; cursor: pointer; }
+  .hsl-layouts button[aria-pressed="true"] { color: #e4efdc; background: #354735; }
+  .layout-adjustment-icon { display: grid; gap: 3px; width: 16px; }
+  .layout-adjustment-icon i { position: relative; display: block; height: 1px; background: currentColor; }
+  .layout-adjustment-icon i::after { position: absolute; top: -2px; left: 3px; width: 5px; height: 5px; border-radius: 1px; background: currentColor; content: ''; }
+  .layout-adjustment-icon i:nth-child(2)::after { left: 10px; }
+  .layout-adjustment-icon i:nth-child(3)::after { left: 6px; }
+  .layout-color-icon { display: flex; gap: 2px; }
+  .layout-color-icon i { display: block; width: 5px; height: 12px; border-radius: 3px; background: #d77979; }
+  .layout-color-icon i:nth-child(2) { background: #75bd87; }
+  .layout-color-icon i:nth-child(3) { background: #7da4d8; }
+  .hsl-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; border: 1px solid #3c4c40; border-radius: 5px; background: #141b17; }
+  .hsl-modes button { min-width: 0; padding: 7px 2px; border: 0; border-radius: 3px; color: #9cad9c; background: transparent; font-size: 11px; }
+  .hsl-modes button.selected { background: #354735; color: #e4efdc; }
+  .hsl-modes button:focus-visible { outline: 2px solid #c6d8b6; outline-offset: 2px; }
+  .hsl-layouts button:focus-visible, .hsl-color-choices button:focus-visible { outline: 2px solid #c6d8b6; outline-offset: 2px; }
+  .hsl-color-choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+  .hsl-color-choices button { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 6px; border: 1px solid #3c4c40; border-radius: 4px; color: #bacbbb; background: #141b17; font-size: 10px; text-align: left; }
+  .hsl-color-choices button[aria-pressed="true"] { border-color: #8aa184; color: #edf4e9; background: #354735; }
+  .hsl-edited { width: 5px; height: 5px; margin-left: auto; border-radius: 50%; background: #c5d9ac; }
+  .hsl-rows { padding-top: 4px; }
+  .hsl-swatch { width: 11px; height: 11px; flex: 0 0 11px; border: 1px solid #ffffff55; border-radius: 50%; }
+  .hsl-swatch-0 { background: #d55a62; } .hsl-swatch-1 { background: #d48a48; }
+  .hsl-swatch-2 { background: #b5c750; } .hsl-swatch-3 { background: #56bf72; }
+  .hsl-swatch-4 { background: #4bbcb3; } .hsl-swatch-5 { background: #5b91d2; }
+  .hsl-swatch-6 { background: #9170ca; } .hsl-swatch-7 { background: #c36b9d; }
+  .hsl-note { margin: 10px 0 0; color: #829684; font-size: 10px; line-height: 1.35; }
+  .picked-editor, .grading-editor { margin-top: 8px; padding-top: 8px; }
+  .picked-editor .control-section { margin: 0; padding: 0; border: 0; }
+  .pick-color-button { width: 100%; margin: 2px 0 8px; }
+  .grading-editor .control-section { margin: 0; padding: 0; border: 0; }
+  .grading-description { margin: 9px 0 12px; color: #839587; font-size: 11px; line-height: 1.4; }
+  .grading-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 2px; border: 1px solid #3c4c40; border-radius: 5px; background: #141b17; }
+  .grading-tabs button { min-width: 0; padding: 7px 1px; border: 0; border-radius: 3px; color: #9cad9c; background: transparent; font-size: 10px; }
+  .grading-tabs button.selected { color: #e4efdc; background: #354735; }
+  .grading-tabs button:focus-visible, .grading-wheel:focus-visible { outline: 2px solid #c6d8b6; outline-offset: 2px; }
+  .grading-wheel-wrap { display: flex; justify-content: center; padding: 16px 0 8px; }
+  .grading-wheel { position: relative; width: 116px; height: 116px; border: 1px solid #738874; border-radius: 50%; background: radial-gradient(circle, #b5bdb3 0, #b5bdb3 4%, transparent 72%), conic-gradient(from 90deg, #d55a62, #d4b84d, #56bf72, #4bbcb3, #5b91d2, #9170ca, #d55a62); cursor: crosshair; touch-action: none; }
+  .grading-wheel-center { position: absolute; inset: 12%; border-radius: 50%; background: radial-gradient(circle, #a7aaa4 0, #a7aaa4 4%, #a7aaa400 72%); pointer-events: none; }
+  .grading-wheel-handle { position: absolute; width: 12px; height: 12px; border: 2px solid #f0f4ea; border-radius: 50%; background: #223027; box-shadow: 0 1px 5px #0008; transform: translate(-50%, -50%); pointer-events: none; }
+  .curve-editor { margin-top: 12px; padding: 4px 10px; border: 1px solid #435447; border-left: 3px solid #829d79; border-radius: 5px; background: #222d25; }
+  .disclosure-button { width: 100%; display: flex; justify-content: space-between; align-items: center; margin: 12px 0; padding: 8px 2px; border: 0; background: transparent; color: #c4d5bd; font: inherit; font-size: 11px; font-weight: 600; text-align: left; cursor: pointer; }
+  .disclosure-button:focus-visible { outline: 2px solid #c6d8b6; outline-offset: 2px; }
+  .disclosure-closed { display: none; }
+  .curve-editor .control-section { margin-bottom: 8px; border: 0; padding: 0; }
+  .curve-description { margin: 0 0 12px; color: #839587; font-size: 11px; line-height: 1.4; }
+  .curve-channels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-bottom: 11px; padding: 2px; border: 1px solid #3c4c40; border-radius: 5px; background: #141b17; }
+  .curve-channels button { padding: 7px 2px; border: 0; border-radius: 3px; color: #9cad9c; background: transparent; font-size: 11px; }
+  .curve-channels button.selected { background: #354735; color: #e4efdc; }
+  .curve-graph { display: block; width: 220px; max-width: 100%; height: 220px; margin: 0 auto 16px; border: 1px solid #3c4c40; background: #141b17; touch-action: none; cursor: crosshair; }
+  .curve-sliders { padding-top: 4px; }
+  .editor-toolbar { height: 40px; flex: 0 0 40px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border-bottom: 1px solid #252c27; background: #1b221e; }
+  .proof-choice { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: 0 0 auto; color: #9fb19f; font-size: 10px; white-space: nowrap; }
+  .proof-choice select { height: 25px; max-width: 108px; padding: 0 5px; border: 1px solid #435447; border-radius: 3px; background: #243128; color: #d9e5d3; font-size: 10px; }
+  .comparison-actions { display: flex; flex: 0 0 auto; border: 1px solid #435447; border-radius: 4px; overflow: hidden; }
+  .comparison-actions button { height: 25px; padding: 0 8px; border: 0; border-right: 1px solid #435447; background: #243128; color: #b8cbb5; font-size: 10px; white-space: nowrap; }
+  .comparison-actions button:last-child { border-right: 0; }
+  .comparison-actions button[aria-pressed="true"] { background: #405443; color: #f1f7ec; }
+  .comparison-actions button:hover:enabled { background: #354838; }
+  .icon-button { height: 27px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #435447; border-radius: 4px; background: #243128; color: #c7d9c1; font-size: 10px; }
+  .icon-button:hover:enabled, .icon-button[aria-pressed="true"] { background: #405443; color: #f1f7ec; }
+  .crop-icon { position: relative; width: 17px; height: 17px; flex: 0 0 17px; }
+  .crop-icon::before, .crop-icon::after { content: ""; position: absolute; width: 11px; height: 11px; }
+  .crop-icon::before { left: 1px; top: 1px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; }
+  .crop-icon::after { right: 1px; bottom: 1px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; }
+  .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0f1310; }
+  .preview { position: absolute; inset: 16px; }
+  .preview-error { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #ffe5d9; font-size: 10px; }
+  .preview-error > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-recovery { display: flex; flex: 0 0 auto; gap: 8px; }
+  .preview-recovery button { padding: 5px 8px; border: 1px solid #b99280; border-radius: 3px; background: #4b3028; color: #ffe5d9; font-size: 11px; }
+  .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 11px; pointer-events: none; }
+  .empty button { pointer-events: auto; margin-top: 10px; }
+  .empty-mark { color: #9eaf9b; font-size: 37px; }
+  .empty-title { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: .01em; }
+  .empty p { margin: 0; color: #829386; }
+  .canvas-footer { height: 31px; flex: 0 0 31px; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-top: 1px solid #252c27; color: #839787; font-size: 10px; background: #1a211c; }
+  .canvas-footer span { margin-right: auto; }
+  .develop-rail { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid #303832; background: #1d2420; }
+  .develop-header { height: 40px; flex: 0 0 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #313b33; }
+  .develop-header h2 { margin: 0; font-size: 13px; font-weight: 650; }
+  .histogram { height: 143px; flex: 0 0 143px; padding: 10px 12px 8px; border-bottom: 1px solid #313b33; background: #1b221e; }
+  .histogram-heading { height: 18px; display: flex; align-items: flex-start; justify-content: space-between; color: #9eb19f; font-size: 9px; font-weight: 600; letter-spacing: .11em; }
+  .histogram-mode { color: #708876; font-size: 8px; font-weight: 500; letter-spacing: .06em; }
+  .histogram-grid { position: relative; height: 88px; display: grid; place-items: center; overflow: hidden; border: 1px solid #39453e; border-radius: 3px; background: #101512; color: #9eaf9e; font-size: 10px; }
+  .histogram-grid span { position: relative; padding: 4px 8px; border-radius: 3px; background: #1b221ee8; }
+  .histogram-preview { position: absolute; inset: 0; }
+  .histogram-scale { display: flex; justify-content: space-between; padding-top: 7px; color: #788c7c; font-size: 8px; letter-spacing: .06em; }
+  .develop-tabs { height: 36px; flex: 0 0 36px; display: flex; align-items: stretch; border-bottom: 1px solid #313b33; color: #788b7c; font-size: 10px; }
+  .develop-tabs button { flex: 1; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #8fa391; font-size: 11px; }
+  .develop-tabs button:hover { color: #dce7d4; background: #263129; }
+  .develop-tabs .selected { border-bottom-color: #bfd3ae; color: #dce7d4; }
+  .help-card { position: absolute; z-index: 2; pointer-events: none; top: 222px; right: 9px; left: 9px; padding: 11px; border: 1px solid #79947a; border-radius: 5px; background: #26362b; box-shadow: 0 8px 22px #0b130da8; color: #e1eadd; font-size: 11px; line-height: 1.45; }
+  .develop-content { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 13px; }
+  .group-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .reset-button { border: 0; background: transparent; color: #aec6a7; font-size: 10px; padding: 3px 0; }
+  .reset-button:hover:enabled { color: #d6e8ca; text-decoration: underline; }
+  .hidden-control, .develop-content.inactive { display: none; }
+  .adjustment-section { margin: 0 0 18px; padding: 0 2px; }
+  .adjustment-section + .adjustment-section { border-top: 1px solid #354139; padding-top: 18px; }
+  .adjustment-section .control-section { margin-bottom: 12px; padding: 0; border: 0; color: #b8ccb4; font-size: 10px; letter-spacing: .08em; }
+  .adjustment-section .control-cue { color: #9daf9e; }
+  .adjustment-section .color-methods { margin-top: 14px; }
+  .creative-color .disclosure-button { margin: 0; padding: 5px 0; }
+  .control-section { margin: 0 0 17px; padding-top: 3px; color: #91a694; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .control-section:not(:first-of-type) { border-top: 1px solid #344038; padding-top: 17px; }
+  .group-description { color: #839587; font-size: 11px; line-height: 1.45; margin: 7px 0 22px; }
+  .control-cue { color: #839587; font-size: 11px; line-height: 1.45; margin: -10px 0 14px; }
+  .availability { color: #a1b4a4; background: #263129; border: 1px solid #3a4a3c; border-radius: 5px; padding: 12px; font-size: 11px; line-height: 1.5; }
+  .develop-divider { height: 1px; background: #344038; margin: 24px 0 20px; }
+  .source-safety { color: #849a87; font-size: 11px; }
+  .filmstrip { height: 92px; flex: 0 0 92px; display: flex; flex-direction: column; border-top: 1px solid #323c34; background: #19201b; }
+  .filmstrip-content { flex: 1; display: flex; align-items: center; gap: 9px; padding: 7px 11px; }
+  .filmstrip-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #aebead; font-size: 11px; }
+  .filmstrip-tile { width: 93px; height: 72px; display: flex; flex-direction: column; padding: 3px; border: 1px solid #9db896; border-radius: 3px; background: #283629; overflow: hidden; }
+  .tile-image { position: relative; display: block; flex: 1; min-height: 0; background: #101713; overflow: hidden; }
+  @media (max-width: 900px) { .workspace { grid-template-columns: 130px minmax(260px, 1fr) 235px; } .navigator { padding: 10px 8px; } .develop-content { padding: 13px 10px; } }
+  @media (max-height: 700px) {
+    .histogram { height: 80px; flex-basis: 80px; padding-top: 6px; padding-bottom: 4px; }
+    .histogram-grid { height: 48px; }
+    .histogram-scale { display: none; }
+    .develop-content { padding-top: 10px; }
+    .group-description { display: none; }
+    .filmstrip { height: 56px; flex-basis: 56px; }
+    .filmstrip-tile { width: 57px; height: 40px; }
+  }
+</style>

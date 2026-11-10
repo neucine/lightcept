@@ -16,34 +16,39 @@ const max_declared_stages: usize = 64;
 const driven_controls_bytes: usize = 64;
 const aux_ports_bytes: usize = 48;
 
-// Stage kinds, image domains, and contract status codes shared with the host.
-const kind_pointwise: u32 = 1;
-const kind_tonal_map: u32 = 2;
-const kind_chromatic_map: u32 = 3;
-const kind_banded_map: u32 = 4;
-const kind_linear_transform: u32 = 5;
-const kind_neighbourhood: u32 = 6;
-const kind_field: u32 = 7;
-const kind_region: u32 = 8;
-const kind_domain_conversion: u32 = 9;
-const kind_branch: u32 = 10;
-const kind_composite: u32 = 11;
-const kind_analysis: u32 = 12;
-
-const domain_sensor_codes: u32 = 1;
-const domain_normalized_mosaic: u32 = 2;
-const domain_camera_linear_rgb: u32 = 3;
-const domain_scene_linear_rgb: u32 = 4;
-const domain_view_referred_rgb: u32 = 5;
-const domain_output_ready: u32 = 6;
-const domain_linear_srgb: u32 = 7;
-const domain_encoded_srgb: u32 = 8;
-
-const status_contract: u32 = 1;
-const status_pinned: u32 = 2;
-const status_native: u32 = 3;
-const status_qualified: u32 = 4;
-const status_promoted: u32 = 5;
+// The serialized report keeps these exact codes. Constructors use finite
+// choices so a stage kind cannot be passed as a domain or maturity status.
+pub enum StageKind: u32 {
+    pointwise = 1,
+    tonal_map = 2,
+    chromatic_map = 3,
+    banded_map = 4,
+    linear_transform = 5,
+    neighbourhood = 6,
+    field = 7,
+    region = 8,
+    domain_conversion = 9,
+    branch = 10,
+    composite = 11,
+    analysis = 12,
+}
+pub enum ImageDomain: u32 {
+    sensor_codes = 1,
+    normalized_mosaic = 2,
+    camera_linear_rgb = 3,
+    scene_linear_rgb = 4,
+    view_referred_rgb = 5,
+    output_ready = 6,
+    linear_srgb = 7,
+    encoded_srgb = 8,
+}
+pub enum StageMaturity: u32 {
+    contract = 1,
+    pinned = 2,
+    native = 3,
+    qualified = 4,
+    promoted = 5,
+}
 
 const scope_global: u32 = 1;
 const scope_local: u32 = 2;
@@ -74,14 +79,32 @@ pub struct StageContractEntry {
     pub admitted_modes: u32;
 }
 
+fn empty_entry(): StageContractEntry {
+    return {
+        name: "",
+        kind: 0,
+        input: 0,
+        output: 0,
+        status: 0,
+        algorithm_version: 0,
+        executable: 0,
+        edit_driven: 0,
+        scopes: 0,
+        plan_position: 0,
+        driven_controls: "",
+        aux_ports: "",
+        admitted_modes: 0
+    };
+}
+
 // A capability the contract declares but this build does not yet compose.
-fn declared_stage(name: string, kind: u32, input: u32, output: u32, status: u32, aux_ports: string): StageContractEntry {
+fn declared_stage(name: string, kind: StageKind, input: ImageDomain, output: ImageDomain, status: StageMaturity, aux_ports: string): StageContractEntry {
     return {
         name: name,
-        kind: kind,
-        input: input,
-        output: output,
-        status: status,
+        kind: kind as u32,
+        input: input as u32,
+        output: output as u32,
+        status: status as u32,
         algorithm_version: 0,
         executable: stage_absent,
         edit_driven: fixed_parameters,
@@ -98,10 +121,10 @@ fn declared_stage(name: string, kind: u32, input: u32, output: u32, status: u32,
 // so its control is declared but not yet executable.
 fn composed_stage(
     name: string,
-    kind: u32,
-    input: u32,
-    output: u32,
-    status: u32,
+    kind: StageKind,
+    input: ImageDomain,
+    output: ImageDomain,
+    status: StageMaturity,
     version: u32,
     scopes: u32,
     drives: u32,
@@ -112,10 +135,10 @@ fn composed_stage(
 ): StageContractEntry {
     return {
         name: name,
-        kind: kind,
-        input: input,
-        output: output,
-        status: status,
+        kind: kind as u32,
+        input: input as u32,
+        output: output as u32,
+        status: status as u32,
         algorithm_version: version,
         executable: stage_composed,
         edit_driven: drives,
@@ -132,80 +155,80 @@ fn composed_stage(
 pub fn declared_stages(): [:]StageContractEntry {
     return [
         // Capture colour.
-        declared_stage("exposure", kind_pointwise, domain_scene_linear_rgb, domain_scene_linear_rgb, status_promoted, "camera baseline exposure"),
-        declared_stage("working_white", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, "camera color matrix"),
-        declared_stage("white_point", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "sampled region evidence"),
-        declared_stage("profile", kind_domain_conversion, domain_camera_linear_rgb, domain_scene_linear_rgb, status_contract, "profile asset"),
+        declared_stage("exposure", StageKind.pointwise, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.promoted, "camera baseline exposure"),
+        declared_stage("working_white", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, "camera color matrix"),
+        declared_stage("white_point", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "sampled region evidence"),
+        declared_stage("profile", StageKind.domain_conversion, ImageDomain.camera_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "profile asset"),
 
         // Tone group, in the order the plan policy declares.
-        declared_stage("blacks", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "declared black pivot"),
-        declared_stage("shadows", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "declared shadow threshold"),
-        declared_stage("contrast", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, ""),
-        declared_stage("highlights", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "clip map"),
-        declared_stage("whites", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "clip map,white reference"),
-        declared_stage("tone_curve", kind_tonal_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "curve asset"),
-        declared_stage("auto_tone", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "histogram,clip map"),
-        declared_stage("auto_white_balance", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "camera color matrix"),
+        declared_stage("blacks", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "declared black pivot"),
+        declared_stage("shadows", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "declared shadow threshold"),
+        declared_stage("contrast", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, ""),
+        declared_stage("highlights", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "clip map"),
+        declared_stage("whites", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "clip map,white reference"),
+        declared_stage("tone_curve", StageKind.tonal_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "curve asset"),
+        declared_stage("auto_tone", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "histogram,clip map"),
+        declared_stage("auto_white_balance", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "camera color matrix"),
 
         // Colour group. `linear_chroma` composes today but is not driven by an edit yet.
-        declared_stage("linear_chroma", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, ""),
-        declared_stage("vibrance", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "luminance rule"),
-        declared_stage("hue", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "declared hue axis"),
-        declared_stage("local_chroma", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "mask weight rule"),
-        declared_stage("luminance_bands", kind_banded_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "band definition"),
-        declared_stage("hsl_grading", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "grading asset"),
-        declared_stage("channel_mixer", kind_linear_transform, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "matrix asset"),
-        declared_stage("gamut_map", kind_branch, domain_scene_linear_rgb, domain_output_ready, status_contract, "rendering intent"),
+        declared_stage("linear_chroma", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, ""),
+        declared_stage("vibrance", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "luminance rule"),
+        declared_stage("hue", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "declared hue axis"),
+        declared_stage("local_chroma", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "mask weight rule"),
+        declared_stage("luminance_bands", StageKind.banded_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "band definition"),
+        declared_stage("hsl_grading", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "grading asset"),
+        declared_stage("channel_mixer", StageKind.linear_transform, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "matrix asset"),
+        declared_stage("gamut_map", StageKind.branch, ImageDomain.scene_linear_rgb, ImageDomain.output_ready, StageMaturity.contract, "rendering intent"),
 
         // Detail and atmosphere. Each kernel declares its own domain, halo, and boundary rule.
-        declared_stage("raw_denoise", kind_neighbourhood, domain_normalized_mosaic, domain_normalized_mosaic, status_contract, "sensor noise model,CFA phase"),
-        declared_stage("image_denoise", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "noise model"),
-        declared_stage("capture_sharpening", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "kernel radius"),
-        declared_stage("clarity", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "declared frequency band"),
-        declared_stage("texture", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "detail band"),
-        declared_stage("defringe", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "CFA phase"),
-        declared_stage("moire", kind_neighbourhood, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "CFA frequency"),
-        declared_stage("dehaze", kind_field, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "haze estimate,clip map"),
-        declared_stage("grain", kind_pointwise, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "declared seed"),
-        declared_stage("highlight_reconstruct", kind_neighbourhood, domain_normalized_mosaic, domain_normalized_mosaic, status_contract, "clip map"),
+        declared_stage("raw_denoise", StageKind.neighbourhood, ImageDomain.normalized_mosaic, ImageDomain.normalized_mosaic, StageMaturity.contract, "sensor noise model,CFA phase"),
+        declared_stage("image_denoise", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "noise model"),
+        declared_stage("capture_sharpening", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "kernel radius"),
+        declared_stage("clarity", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "declared frequency band"),
+        declared_stage("texture", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "detail band"),
+        declared_stage("defringe", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "CFA phase"),
+        declared_stage("moire", StageKind.neighbourhood, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "CFA frequency"),
+        declared_stage("dehaze", StageKind.field, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "haze estimate,clip map"),
+        declared_stage("grain", StageKind.pointwise, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "declared seed"),
+        declared_stage("highlight_reconstruct", StageKind.neighbourhood, ImageDomain.normalized_mosaic, ImageDomain.normalized_mosaic, StageMaturity.contract, "clip map"),
 
         // Geometry and optics. A stage that moves pixel coordinates invalidates masks and analysis.
-        declared_stage("orientation", kind_region, domain_sensor_codes, domain_sensor_codes, status_native, ""),
-        declared_stage("crop", kind_region, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "mask remapping"),
-        declared_stage("straighten", kind_region, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "mask remapping,boundary fill"),
-        declared_stage("perspective", kind_region, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "control points,mask remapping"),
-        declared_stage("lens_distortion", kind_region, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "lens model asset"),
-        declared_stage("vignetting", kind_field, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "lens model asset"),
-        declared_stage("tca", kind_region, domain_normalized_mosaic, domain_normalized_mosaic, status_contract, "lens model asset"),
+        declared_stage("orientation", StageKind.region, ImageDomain.sensor_codes, ImageDomain.sensor_codes, StageMaturity.native, ""),
+        declared_stage("crop", StageKind.region, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "mask remapping"),
+        declared_stage("straighten", StageKind.region, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "mask remapping,boundary fill"),
+        declared_stage("perspective", StageKind.region, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "control points,mask remapping"),
+        declared_stage("lens_distortion", StageKind.region, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "lens model asset"),
+        declared_stage("vignetting", StageKind.field, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "lens model asset"),
+        declared_stage("tca", StageKind.region, ImageDomain.normalized_mosaic, ImageDomain.normalized_mosaic, StageMaturity.contract, "lens model asset"),
 
         // Mask operands and masked adjustment.
-        declared_stage("mask_geometry", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "source geometry"),
-        declared_stage("sky_mask", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "scene content"),
-        declared_stage("described_mask", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "mask geometry"),
-        declared_stage("linear_gradient", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "gradient endpoints"),
-        declared_stage("brush", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "stroke history"),
-        declared_stage("range_mask", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "selection bounds"),
-        declared_stage("local_adjust", kind_composite, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "base stage,mask weight rule"),
+        declared_stage("mask_geometry", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "source geometry"),
+        declared_stage("sky_mask", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "scene content"),
+        declared_stage("described_mask", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "mask geometry"),
+        declared_stage("linear_gradient", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "gradient endpoints"),
+        declared_stage("brush", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "stroke history"),
+        declared_stage("range_mask", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "selection bounds"),
+        declared_stage("local_adjust", StageKind.composite, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "base stage,mask weight rule"),
 
         // Output branch. Each branch carries its own identity.
-        declared_stage("view_transform", kind_branch, domain_scene_linear_rgb, domain_view_referred_rgb, status_contract, "reference display"),
-        declared_stage("proof_transform", kind_branch, domain_view_referred_rgb, domain_output_ready, status_contract, "destination profile,rendering intent"),
-        declared_stage("output_transform", kind_branch, domain_scene_linear_rgb, domain_output_ready, status_native, ""),
-        declared_stage("working_to_linear_srgb", kind_domain_conversion, domain_scene_linear_rgb, domain_linear_srgb, status_native, ""),
-        declared_stage("srgb_clip", kind_pointwise, domain_linear_srgb, domain_linear_srgb, status_native, ""),
-        declared_stage("srgb_transfer", kind_domain_conversion, domain_linear_srgb, domain_encoded_srgb, status_native, ""),
-        declared_stage("output_quantize", kind_domain_conversion, domain_encoded_srgb, domain_output_ready, status_native, "precision policy"),
-        declared_stage("output_profile", kind_branch, domain_output_ready, domain_output_ready, status_native, "icc asset"),
-        declared_stage("precision_class", kind_branch, domain_output_ready, domain_output_ready, status_native, "precision policy"),
+        declared_stage("view_transform", StageKind.branch, ImageDomain.scene_linear_rgb, ImageDomain.view_referred_rgb, StageMaturity.contract, "reference display"),
+        declared_stage("proof_transform", StageKind.branch, ImageDomain.view_referred_rgb, ImageDomain.output_ready, StageMaturity.contract, "destination profile,rendering intent"),
+        declared_stage("output_transform", StageKind.branch, ImageDomain.scene_linear_rgb, ImageDomain.output_ready, StageMaturity.native, ""),
+        declared_stage("working_to_linear_srgb", StageKind.domain_conversion, ImageDomain.scene_linear_rgb, ImageDomain.linear_srgb, StageMaturity.native, ""),
+        declared_stage("srgb_clip", StageKind.pointwise, ImageDomain.linear_srgb, ImageDomain.linear_srgb, StageMaturity.native, ""),
+        declared_stage("srgb_transfer", StageKind.domain_conversion, ImageDomain.linear_srgb, ImageDomain.encoded_srgb, StageMaturity.native, ""),
+        declared_stage("output_quantize", StageKind.domain_conversion, ImageDomain.encoded_srgb, ImageDomain.output_ready, StageMaturity.native, "precision policy"),
+        declared_stage("output_profile", StageKind.branch, ImageDomain.output_ready, ImageDomain.output_ready, StageMaturity.native, "icc asset"),
+        declared_stage("precision_class", StageKind.branch, ImageDomain.output_ready, ImageDomain.output_ready, StageMaturity.native, "precision policy"),
 
         // Analysis stages feed auxiliary values and never write pixels.
-        declared_stage("histogram", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, ""),
-        declared_stage("clip_map", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "white reference"),
-        declared_stage("region_statistics", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "region geometry"),
-        declared_stage("noise_estimate", kind_analysis, domain_normalized_mosaic, domain_normalized_mosaic, status_contract, "CFA phase"),
-        declared_stage("sharpness_estimate", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "kernel radius"),
-        declared_stage("color_cast", kind_analysis, domain_scene_linear_rgb, domain_scene_linear_rgb, status_contract, "camera color matrix"),
-        declared_stage("gamut_report", kind_analysis, domain_scene_linear_rgb, domain_output_ready, status_contract, "destination gamut")
+        declared_stage("histogram", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, ""),
+        declared_stage("clip_map", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "white reference"),
+        declared_stage("region_statistics", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "region geometry"),
+        declared_stage("noise_estimate", StageKind.analysis, ImageDomain.normalized_mosaic, ImageDomain.normalized_mosaic, StageMaturity.contract, "CFA phase"),
+        declared_stage("sharpness_estimate", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "kernel radius"),
+        declared_stage("color_cast", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.contract, "camera color matrix"),
+        declared_stage("gamut_report", StageKind.analysis, ImageDomain.scene_linear_rgb, ImageDomain.output_ready, StageMaturity.contract, "destination gamut")
     ];
 }
 
@@ -215,19 +238,19 @@ pub fn declared_stages(): [:]StageContractEntry {
 // No composed stage accepts a masked local application yet, so none reports the local scope bit.
 pub fn composed_stages(has_camera_matrix: bool, editable_white_balance: bool): [:]StageContractEntry {
     var stages: [:]StageContractEntry = [
-        composed_stage("exposure", kind_pointwise, domain_scene_linear_rgb, domain_scene_linear_rgb, status_promoted, 1, scope_global, edit_driven, "exposure", "camera baseline exposure", modes_delta, 1)
+        composed_stage("exposure", StageKind.pointwise, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.promoted, 1, scope_global, edit_driven, "exposure", "camera baseline exposure", modes_delta, 1)
     ];
     var position: u32 = 1;
     if has_camera_matrix and editable_white_balance {
         position = position + 1;
-        stages.push(composed_stage("working_white", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, 1, scope_global, edit_driven, "temp,tint", "camera color matrix", modes_delta_target, position));
+        stages.push(composed_stage("working_white", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, 1, scope_global, edit_driven, "temp,tint", "camera color matrix", modes_delta_target, position));
     }
     // The chroma stage composes with the fixed neutral value, so saturation is declared but the
     // stage is not driven by an edit yet.
     position = position + 1;
-    stages.push(composed_stage("linear_chroma", kind_chromatic_map, domain_scene_linear_rgb, domain_scene_linear_rgb, status_native, 1, scope_global, fixed_parameters, "", "", modes_none, position));
+    stages.push(composed_stage("linear_chroma", StageKind.chromatic_map, ImageDomain.scene_linear_rgb, ImageDomain.scene_linear_rgb, StageMaturity.native, 1, scope_global, fixed_parameters, "", "", modes_none, position));
     position = position + 1;
-    stages.push(composed_stage("output_transform", kind_branch, domain_scene_linear_rgb, domain_output_ready, status_native, 1, scope_global, fixed_parameters, "", "", modes_none, position));
+    stages.push(composed_stage("output_transform", StageKind.branch, ImageDomain.scene_linear_rgb, ImageDomain.output_ready, StageMaturity.native, 1, scope_global, fixed_parameters, "", "", modes_none, position));
     return stages;
 }
 
@@ -337,7 +360,7 @@ fn describe_stage_contract(
         if index < entries.len() {
             write_descriptor(stages as! usize, index, entries[index]);
         } else {
-            write_descriptor(stages as! usize, index, declared_stage("", 0, 0, 0, 0, ""));
+            write_descriptor(stages as! usize, index, empty_entry());
         }
         index = index + 1;
     }

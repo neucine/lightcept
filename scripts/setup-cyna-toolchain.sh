@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-source "$root/toolchains/cyna.lock"
+source "$root/cyna-toolchain.lock"
 zig_bin="${LIGHTCEPT_ZIG_017:-zig}"
 if [[ "$("$zig_bin" version)" != "$zig_version" ]]; then
   echo "Lightcept requires Zig $zig_version; set LIGHTCEPT_ZIG_017" >&2

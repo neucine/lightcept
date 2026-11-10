@@ -1,11 +1,16 @@
 import .engine.tiff.tiff;
 
-// Nikon Z8 lossless maker-note metadata v1. Input is the bounded tag 37500
+// Nikon 14-bit maker-note metadata v1. Supports the qualified Z8 lossless
+// Huffman layout and Z6 II packed layout. Input is the bounded tag 37500
 // payload, with offsets inside its embedded little-endian TIFF based at byte
 // 10. Crop coordinates and dimensions are stored photosites; black and white
 // levels are 14-bit sensor codes. White multipliers are dimensionless.
 // Status: 0 success, 1 malformed, 2 unsupported variant, 3 resource limit.
+pub const encoding_lossless_huffman: u32 = 1;
+pub const encoding_packed_14: u32 = 2;
+
 pub struct NefMakerMetadata {
+    pub encoding: u32;
     pub seeds: [4]u32;
     pub crop: [4]u32;
     pub black: [4]u32;
@@ -23,6 +28,7 @@ struct Entry {
 
 fn empty(status: i32): NefMakerMetadata {
     return {
+        encoding: 0,
         seeds: [0] ** 4,
         crop: [0] ** 4,
         black: [0] ** 4,
@@ -105,8 +111,16 @@ pub fn parse(note: []const u8, stored_width: u32, stored_height: u32): NefMakerM
         result.seeds = [tiff.u16le(input, at + 2) as u32, tiff.u16le(input, at + 4) as u32,
             tiff.u16le(input, at + 6) as u32, tiff.u16le(input, at + 8) as u32
         ];
+        result.encoding = encoding_lossless_huffman;
     } else {
-        return result;
+        if find(input, directory, 0x0093) is compression {
+            if compression.kind != 3 or compression.count != 1 or compression.value != 10 {
+                return result;
+            }
+            result.encoding = encoding_packed_14;
+        } else {
+            return result;
+        }
     }
     if four_shorts(input, length, directory, 0x0045) is values {
         result.crop = values;
@@ -125,7 +139,10 @@ pub fn parse(note: []const u8, stored_width: u32, stored_height: u32): NefMakerM
     }
     var i: usize = 0;
     while i < 4 {
-        if result.seeds[i] > 16383 or result.black[i] >= result.white or result.black[i] != result.black[0] {
+        if result.black[i] >= result.white or result.black[i] != result.black[0] {
+            return empty(2);
+        }
+        if result.encoding == encoding_lossless_huffman and result.seeds[i] > 16383 {
             return empty(2);
         }
         i = i + 1;

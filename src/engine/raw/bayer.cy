@@ -229,7 +229,7 @@ fn write_sample(output: *f64, index: usize, value: f64): void {
     }
 }
 
-// Stage-level diagnostic: normalized Bayer samples to scene-linear camera RGB.
+// Stage-level diagnostic: normalized Bayer samples to camera-linear RGB.
 // This function exposes reconstruction before white balance, color conversion,
 // exposure, resampling, or display encoding for matched-algorithm verification.
 fn demosaic_normalized_bayer(input: *const f32, input_len: usize, width: usize, height: usize, cfa_input: *const u32, cfa_len: usize, output: *f64, output_len: usize, method: u32): i32 {

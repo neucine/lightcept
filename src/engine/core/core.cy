@@ -47,3 +47,9 @@ pub fn finite_sample(value: f32): bool {
     }
     return true;
 }
+
+// IEEE subtraction of a finite value from itself is zero; NaN and infinities
+// produce NaN. This avoids a native math dependency at the component boundary.
+pub fn finite_sample64(value: f64): bool {
+    return value - value == 0.0;
+}

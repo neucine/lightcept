@@ -1,0 +1,50 @@
+<template>
+  <div class="mixer-row">
+    <div class="heading"><label :for="rowId()"><span class="name"><span #if="props.showSwatch" :class="props.swatchClass" aria-hidden="true"></span>{{ props.name }}</span></label><span class="value-actions"><span class="value">{{ dragging ? liveDisplay() : props.display }}</span><button #if="props.value !== 0" type="button" class="reset" :aria-label="`Reset ${props.ariaLabel}`" :disabled="props.disabled" @click="reset">↺</button></span></div>
+    <StepRange :id="rowId()" :label="props.ariaLabel" :describedBy="''" :value="props.value"
+      :min="-100" :max="100" :stepAmount="10" :disabled="props.disabled"
+      @preview="preview" @commit="commit" @step="step" @reset="reset" />
+  </div>
+</template>
+
+<script lang="ts">
+  import StepRange from "../fundamental/StepRange.weiv";
+  export interface Props {
+    band: number;
+    kind: number;
+    name: string;
+    ariaLabel: string;
+    swatchClass: string;
+    value: number;
+    display: string;
+    showSwatch: boolean;
+    disabled: boolean;
+  }
+  export let props: Props;
+  let dragging = false;
+  let liveValue = 0;
+
+  function rowId() { return `hsl-${props.kind}-${props.band}`; }
+  function liveDisplay() { return props.kind === 0 ? `${(liveValue * 0.45).toFixed(1)}°` : `${liveValue}%`; }
+  function preview(value: number) { liveValue = value; dragging = true; emit('preview', { band: props.band, kind: props.kind, value }); }
+  function commit(value: number) { dragging = false; emit('commit', { band: props.band, kind: props.kind, value }); }
+  function step(delta: number) { emit('step', { band: props.band, kind: props.kind, delta }); }
+  function reset() { emit('reset', { band: props.band, kind: props.kind }); }
+</script>
+
+<style>
+  .mixer-row { margin-top: 12px; }
+  .heading, .name { display: flex; align-items: center; }
+  .heading { justify-content: space-between; gap: 7px; margin-bottom: 5px; color: #d3ddd0; font-size: 11px; }
+  .name { gap: 8px; }
+  .value-actions { display: inline-flex; align-items: center; gap: 7px; }
+  .value { color: #afc6aa; font-variant-numeric: tabular-nums; }
+  .reset { border: 0; padding: 0 2px; background: transparent; color: #a9c5a2; font-size: 16px; line-height: 1; cursor: pointer; }
+  .reset:hover:enabled, .reset:focus-visible { color: #e3f0d9; }
+  .reset:focus-visible { outline: 2px solid #d2e5bd; outline-offset: 2px; }
+  .hsl-swatch { width: 11px; height: 11px; flex: 0 0 11px; border: 1px solid #ffffff55; border-radius: 50%; }
+  .hsl-swatch-0 { background: #d55a62; } .hsl-swatch-1 { background: #d48a48; }
+  .hsl-swatch-2 { background: #b5c750; } .hsl-swatch-3 { background: #56bf72; }
+  .hsl-swatch-4 { background: #4bbcb3; } .hsl-swatch-5 { background: #5b91d2; }
+  .hsl-swatch-6 { background: #9170ca; } .hsl-swatch-7 { background: #c36b9d; }
+</style>

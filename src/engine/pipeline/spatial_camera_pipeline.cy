@@ -1,7 +1,8 @@
 import .engine.raw.bayer;
-import .engine.color.spatial_highlight;
+import .engine.raw.spatial_highlight;
 import .engine.color.white_balance;
-import .engine.render.camera_rgb_preview;
+import .engine.render.camera_rgb_render;
+import .engine.render.working_rgb_render;
 import std.math;
 
 pub struct SpatialRequirements {
@@ -192,17 +193,93 @@ pub fn prepare_camera(normalized: []const f32, source_width: usize, source_heigh
 
 // Applies user edits to a prepared camera-linear RGB raster.
 pub fn render_prepared(camera: []const f32, source_width: usize, source_height: usize, matrix: [9]f64, default_exposure: f64, user_exposure: f64, contrast_slope: f64, orientation: u32, output: []u8, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
-    return camera_rgb_preview.render_preview_with_contrast(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *u8, output.len(), width, height, default_exposure, user_exposure, contrast_slope, orientation, cancelled, context);
+    return camera_rgb_render.render_preview_with_contrast(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *u8, output.len(), width, height, default_exposure, user_exposure, contrast_slope, orientation, cancelled, context);
 }
 
 // WorkingPreviewV1: build an oriented, area-averaged f64 scene-linear
 // Rec.2020/D65 preview after reconstruction. Output is width * height * 3.
 pub fn prepare_working_preview(camera: []const f32, source_width: usize, source_height: usize, matrix: [9]f64, orientation: u32, output: []f64, width: usize, height: usize, cancelled: fn (usize): bool, context: usize): i32 {
-    return camera_rgb_preview.camera_to_working_preview(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *f64, output.len(), width, height, orientation, cancelled, context);
+    return camera_rgb_render.camera_rgb_to_working_preview(camera.ptr as! *const f32, camera.len(), source_width, source_height, matrix[0..].ptr as! *const f64, 9, output.ptr as! *f64, output.len(), width, height, orientation, cancelled, context);
+}
+
+// Upright source-pixel rectangle from a prepared full camera RGB raster.
+// Output is caller-owned scene-linear Rec.2020/D65 f64 RGB and is invalid on
+// failure. An equal-size output retains original visual-pixel geometry.
+pub fn prepare_working_region(camera: []const f32, source_width: usize,
+    source_height: usize, matrix: [9]f64, orientation: u32,
+    left: usize, top: usize, region_width: usize, region_height: usize,
+    output: []f64, cancelled: fn (usize): bool, context: usize
+): i32 {
+    return camera_rgb_render.camera_rgb_to_working_region(
+        camera.ptr as! *const f32, camera.len(), source_width, source_height,
+        matrix[0..].ptr as! *const f64, 9, output.ptr as! *f64,
+        output.len(), region_width, region_height, orientation,
+        left, top, region_width, region_height, cancelled, context
+    );
 }
 
 // WorkingPreviewV1 output: apply EV and contrast to a borrowed f64 working
 // preview, then encode opaque sRGB RGBA8. Cancellation is checked per row.
 pub fn render_prepared_raw(working: *const f64, working_length: usize, output: *u8, output_length: usize, width: usize, height: usize, default_exposure: f64, user_exposure: f64, contrast_slope: f64, cancelled: fn (usize): bool, context: usize): i32 {
-    return camera_rgb_preview.render_working_rgba8(working, working_length, output, output_length, width, height, default_exposure, user_exposure, contrast_slope, cancelled, context);
+    return working_rgb_render.render_working_rgba8(working, working_length, output, output_length, width, height, default_exposure, user_exposure, contrast_slope, cancelled, context);
+}
+
+pub fn render_prepared_tone(working: *const f64, working_length: usize, output: *u8, output_length: usize, width: usize, height: usize, default_exposure: f64, user_exposure: f64, contrast_slope: f64, shadow_strength: f64, highlight_strength: f64, cancelled: fn (usize): bool, context: usize): i32 {
+    return working_rgb_render.render_working_rgba8_with_tone(working, working_length, output, output_length, width, height, default_exposure, user_exposure, contrast_slope, shadow_strength, highlight_strength, cancelled, context);
+}
+
+// EndpointToneV2 composes the endpoint kernels around the existing tonal
+// stages. Black offset uses linear reference-white units; other strengths use
+// their native kernel ranges. Zero endpoints preserve PreviewToneV1 bytes.
+pub fn render_prepared_endpoints(working: *const f64, working_length: usize, output: *u8, output_length: usize, width: usize, height: usize, default_exposure: f64, user_exposure: f64, contrast_slope: f64, black_offset: f64, shadow_strength: f64, highlight_strength: f64, white_strength: f64, cancelled: fn (usize): bool, context: usize): i32 {
+    return working_rgb_render.render_working_rgba8_with_endpoints(working, working_length, output, output_length, width, height, default_exposure, user_exposure, contrast_slope, black_offset, shadow_strength, highlight_strength, white_strength, cancelled, context);
+}
+
+pub fn render_prepared_color(working: *const f64, working_length: usize,
+    output: *u8, output_length: usize, width: usize, height: usize,
+    default_exposure: f64, user_exposure: f64, contrast_slope: f64,
+    black_offset: f64, shadow_strength: f64, highlight_strength: f64,
+    white_strength: f64, warmth_percent: i32, tint_percent: i32,
+    vibrance_percent: i32, saturation_percent: i32,
+    cancelled: fn (usize): bool, context: usize
+): i32 {
+    return working_rgb_render.render_working_rgba8_with_color(working,
+        working_length, output, output_length, width, height, default_exposure,
+        user_exposure, contrast_slope, black_offset, shadow_strength,
+        highlight_strength, white_strength, warmth_percent, tint_percent,
+        vibrance_percent, saturation_percent, cancelled, context
+    );
+}
+
+pub fn render_prepared_detail(working: *const f64, working_length: usize,
+    output: *u8, output_length: usize, width: usize, height: usize,
+    default_exposure: f64, user_exposure: f64, contrast_slope: f64,
+    black_offset: f64, shadow_strength: f64, highlight_strength: f64,
+    white_strength: f64, warmth_percent: i32, tint_percent: i32,
+    vibrance_percent: i32, saturation_percent: i32, clarity_percent: i32,
+    cancelled: fn (usize): bool, context: usize
+): i32 {
+    return working_rgb_render.render_working_rgba8_with_clarity(working,
+        working_length, output, output_length, width, height, default_exposure,
+        user_exposure, contrast_slope, black_offset, shadow_strength,
+        highlight_strength, white_strength, warmth_percent, tint_percent,
+        vibrance_percent, saturation_percent, clarity_percent, cancelled, context
+    );
+}
+
+pub fn render_prepared_texture(working: *const f64, working_length: usize,
+    output: *u8, output_length: usize, width: usize, height: usize,
+    default_exposure: f64, user_exposure: f64, contrast_slope: f64,
+    black_offset: f64, shadow_strength: f64, highlight_strength: f64,
+    white_strength: f64, warmth_percent: i32, tint_percent: i32,
+    vibrance_percent: i32, saturation_percent: i32, clarity_percent: i32,
+    texture_percent: i32, cancelled: fn (usize): bool, context: usize
+): i32 {
+    return working_rgb_render.render_working_rgba8_with_detail(working,
+        working_length, output, output_length, width, height, default_exposure,
+        user_exposure, contrast_slope, black_offset, shadow_strength,
+        highlight_strength, white_strength, warmth_percent, tint_percent,
+        vibrance_percent, saturation_percent, clarity_percent, texture_percent,
+        cancelled, context
+    );
 }

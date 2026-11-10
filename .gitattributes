@@ -1,1 +1,3 @@
-toolchains/*.patch whitespace=-trailing-space
+*.icns binary
+*.png binary
+*.ttf binary

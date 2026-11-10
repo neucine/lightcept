@@ -9,6 +9,7 @@
 // exact bounds. A future revision that changes a range adds its own rows so projects pinned to an
 // older revision keep replaying.
 import .engine.pipeline.develop_stage_manifest;
+import .engine.develop.edit_plan;
 
 const control_contract_version: u32 = 2;
 const control_name_bytes: usize = 24;
@@ -23,17 +24,37 @@ const max_reproducible_revisions: usize = 8;
 pub const scope_global: u32 = 1;
 pub const scope_local: u32 = 2;
 pub const scope_both: u32 = 3;
-const mode_delta: u32 = 0;
-const mode_target: u32 = 1;
+// These are the version-2 control-contract transport codes. The logical
+// develop plan uses delta=2; its mode must be converted by meaning.
+pub enum ControlMode: u32 {
+    delta = 0,
+    target = 1,
+}
+pub const mode_delta: u32 = 0;
+pub const mode_target: u32 = 1;
 
-const family_capture_colour: u32 = 1;
-const family_tone: u32 = 2;
-const family_chroma: u32 = 3;
-const family_detail: u32 = 4;
-const family_geometry: u32 = 5;
-const family_mask: u32 = 6;
-const family_output: u32 = 7;
-const family_analysis: u32 = 8;
+// Translate only an admitted transport mode before compiling a logical plan.
+// Equal numeric values for target are incidental; delta differs across them.
+pub fn logical_plan_mode(mode: u32): ?u32 {
+    if mode == ControlMode.delta as u32 {
+        return edit_plan.mode_delta;
+    }
+    if mode == ControlMode.target as u32 {
+        return edit_plan.mode_target;
+    }
+    return none;
+}
+
+pub enum ControlFamily: u32 {
+    capture_colour = 1,
+    tone = 2,
+    chroma = 3,
+    detail = 4,
+    geometry = 5,
+    mask = 6,
+    output = 7,
+    analysis = 8,
+}
 
 // Edit-validation status codes. The host turns these into product errors; the decision lives here.
 pub const edit_ok: u32 = 0;
@@ -87,7 +108,7 @@ fn unused_domain(): ValueDomain {
     };
 }
 
-fn control(name: string, label: string, family: u32, units: string, neutral: f64, scope: u32, first: ValueDomain, second: ValueDomain, third: ValueDomain, fourth: ValueDomain): ControlContractEntry {
+fn control(name: string, label: string, family: ControlFamily, units: string, neutral: f64, scope: u32, first: ValueDomain, second: ValueDomain, third: ValueDomain, fourth: ValueDomain): ControlContractEntry {
     var count: u32 = 0;
     if first.scope > 0 {
         count = count + 1;
@@ -104,7 +125,7 @@ fn control(name: string, label: string, family: u32, units: string, neutral: f64
     return {
         name: name,
         label: label,
-        family: family,
+        family: family as u32,
         units: units,
         neutral: neutral,
         scope: scope,
@@ -117,7 +138,7 @@ fn control(name: string, label: string, family: u32, units: string, neutral: f64
 }
 
 // A control whose delta and target range is the same in every admitted scope.
-fn percent_control(name: string, label: string, family: u32, units: string, scope: u32): ControlContractEntry {
+fn percent_control(name: string, label: string, family: ControlFamily, units: string, scope: u32): ControlContractEntry {
     return control(name, label, family, units, 0.0, scope,
         domain(scope, mode_delta, -100.0, 100.0),
         domain(scope, mode_target, -100.0, 100.0),
@@ -130,69 +151,69 @@ fn percent_control(name: string, label: string, family: u32, units: string, scop
 // and the planner advertise controls, so a control index always means the same row here.
 fn control_rows(): [:]ControlContractEntry {
     return [
-        control("exposure", "Exposure", family_capture_colour, "EV stops", 0.0, scope_both,
+        control("exposure", "Exposure", ControlFamily.capture_colour, "EV stops", 0.0, scope_both,
             domain(scope_both, mode_delta, -4.0, 4.0),
             domain(scope_both, mode_target, -4.0, 4.0),
             unused_domain(),
             unused_domain()
         ),
-        control("contrast", "Contrast", family_tone, "percent", 0.0, scope_both,
+        control("contrast", "Contrast", ControlFamily.tone, "percent", 0.0, scope_both,
             domain(scope_both, mode_delta, -100.0, 100.0),
             domain(scope_both, mode_target, -100.0, 100.0),
             unused_domain(),
             unused_domain()
         ),
-        control("temp", "Color temperature", family_capture_colour, "kelvin globally, relative units locally", 0.0, scope_both,
+        control("temp", "Color temperature", ControlFamily.capture_colour, "kelvin globally, relative units locally", 0.0, scope_both,
             domain(scope_global, mode_delta, -5000.0, 5000.0),
             domain(scope_global, mode_target, 2000.0, 50000.0),
             domain(scope_local, mode_delta, -100.0, 100.0),
             domain(scope_local, mode_target, -100.0, 100.0)
         ),
-        control("tint", "Green-magenta tint", family_capture_colour, "relative units", 0.0, scope_both,
+        control("tint", "Green-magenta tint", ControlFamily.capture_colour, "relative units", 0.0, scope_both,
             domain(scope_both, mode_delta, -100.0, 100.0),
             domain(scope_both, mode_target, -100.0, 100.0),
             unused_domain(),
             unused_domain()
         ),
-        control("sharpening", "Capture sharpening amount", family_detail, "amount", 0.0, scope_both,
+        control("sharpening", "Capture sharpening amount", ControlFamily.detail, "amount", 0.0, scope_both,
             domain(scope_global, mode_delta, -100.0, 100.0),
             domain(scope_global, mode_target, 0.0, 150.0),
             domain(scope_local, mode_delta, -100.0, 100.0),
             domain(scope_local, mode_target, -100.0, 100.0)
         ),
-        percent_control("texture", "Fine-detail texture", family_detail, "percent", scope_both),
-        percent_control("clarity", "Midtone clarity", family_detail, "percent", scope_both),
-        percent_control("dehaze", "Atmospheric dehaze", family_detail, "percent", scope_both),
-        percent_control("saturation", "Color saturation", family_chroma, "percent", scope_both),
-        percent_control("red_luminance", "Red color luminance", family_chroma, "percent", scope_global),
-        percent_control("orange_luminance", "Orange color luminance", family_chroma, "percent", scope_global),
-        percent_control("yellow_luminance", "Yellow color luminance", family_chroma, "percent", scope_global),
-        percent_control("green_luminance", "Green color luminance", family_chroma, "percent", scope_global),
-        percent_control("aqua_luminance", "Aqua color luminance", family_chroma, "percent", scope_global),
-        percent_control("blue_luminance", "Blue color luminance", family_chroma, "percent", scope_global),
-        percent_control("purple_luminance", "Purple color luminance", family_chroma, "percent", scope_global),
-        percent_control("magenta_luminance", "Magenta color luminance", family_chroma, "percent", scope_global),
-        percent_control("highlights", "Highlight tone", family_tone, "percent", scope_both),
-        percent_control("shadows", "Shadow tone", family_tone, "percent", scope_both),
-        percent_control("whites", "White point", family_tone, "percent", scope_both),
-        percent_control("blacks", "Black point", family_tone, "percent", scope_both),
-        percent_control("hue", "Local hue shift", family_chroma, "relative units", scope_local),
-        control("color_hue", "Local color overlay hue", family_chroma, "degrees", 0.0, scope_local,
+        percent_control("texture", "Fine-detail texture", ControlFamily.detail, "percent", scope_both),
+        percent_control("clarity", "Midtone clarity", ControlFamily.detail, "percent", scope_both),
+        percent_control("dehaze", "Atmospheric dehaze", ControlFamily.detail, "percent", scope_both),
+        percent_control("saturation", "Color saturation", ControlFamily.chroma, "percent", scope_both),
+        percent_control("red_luminance", "Red color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("orange_luminance", "Orange color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("yellow_luminance", "Yellow color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("green_luminance", "Green color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("aqua_luminance", "Aqua color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("blue_luminance", "Blue color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("purple_luminance", "Purple color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("magenta_luminance", "Magenta color luminance", ControlFamily.chroma, "percent", scope_global),
+        percent_control("highlights", "Highlight tone", ControlFamily.tone, "percent", scope_both),
+        percent_control("shadows", "Shadow tone", ControlFamily.tone, "percent", scope_both),
+        percent_control("whites", "White point", ControlFamily.tone, "percent", scope_both),
+        percent_control("blacks", "Black point", ControlFamily.tone, "percent", scope_both),
+        percent_control("hue", "Local hue shift", ControlFamily.chroma, "relative units", scope_local),
+        control("color_hue", "Local color overlay hue", ControlFamily.chroma, "degrees", 0.0, scope_local,
             domain(scope_local, mode_delta, -100.0, 100.0),
             domain(scope_local, mode_target, 0.0, 360.0),
             unused_domain(),
             unused_domain()
         ),
-        control("color_sat", "Local color overlay saturation", family_chroma, "percent", 0.0, scope_local,
+        control("color_sat", "Local color overlay saturation", ControlFamily.chroma, "percent", 0.0, scope_local,
             domain(scope_local, mode_delta, -100.0, 100.0),
             domain(scope_local, mode_target, 0.0, 100.0),
             unused_domain(),
             unused_domain()
         ),
-        percent_control("noise", "Local noise reduction", family_detail, "percent", scope_local),
-        percent_control("moire", "Local moire reduction", family_detail, "percent", scope_local),
-        percent_control("defringe", "Local defringe", family_detail, "percent", scope_local),
-        control("amount", "Local mask adjustment amount", family_mask, "percent", 0.0, scope_local,
+        percent_control("noise", "Local noise reduction", ControlFamily.detail, "percent", scope_local),
+        percent_control("moire", "Local moire reduction", ControlFamily.detail, "percent", scope_local),
+        percent_control("defringe", "Local defringe", ControlFamily.detail, "percent", scope_local),
+        control("amount", "Local mask adjustment amount", ControlFamily.mask, "percent", 0.0, scope_local,
             domain(scope_local, mode_delta, -100.0, 100.0),
             domain(scope_local, mode_target, 0.0, 200.0),
             unused_domain(),
@@ -230,7 +251,20 @@ pub fn control_contract(revision: u32): [:]ControlContractEntry {
 // One blank row stands for "no contract at this revision". The query rejects an unknown revision
 // before a host reads it, so this only keeps the descriptor writer total.
 fn placeholder_contract(): [:]ControlContractEntry {
-    return [control("", "", 0, "", 0.0, 0, unused_domain(), unused_domain(), unused_domain(), unused_domain())];
+    const empty = unused_domain();
+    return [{
+        name: "",
+        label: "",
+        family: 0,
+        units: "",
+        neutral: 0.0,
+        scope: 0,
+        domain_count: 0,
+        first: empty,
+        second: empty,
+        third: empty,
+        fourth: empty
+    }];
 }
 
 fn domain_at(entry: ControlContractEntry, index: usize): ValueDomain {

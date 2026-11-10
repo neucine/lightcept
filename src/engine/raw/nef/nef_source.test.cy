@@ -1,7 +1,9 @@
 import .engine.raw.nef.nef_source;
+import { NefCamera } from .engine.raw.nef.nef_source;
 import .engine.raw.nef.nef_mosaic;
 import .engine.pipeline.nef.nef_pipeline;
 import .engine.pipeline.nef.nef_tiff16_pipeline;
+import .engine.pipeline.preview_develop_plan;
 import .engine.tiff.tiff;
 import std.fs;
 
@@ -122,6 +124,44 @@ fn complete_fixture(): [512]u8 {
     return bytes;
 }
 
+fn put_packed_sample(bytes: []u8, row_base: usize, column: usize, value: u16): void {
+    const bit = column * 14;
+    const at = row_base + bit / 8;
+    const shift = bit % 8;
+    var word = (bytes[at] as u32) +
+    ((bytes[at + 1] as u32) << 8) +
+    ((bytes[at + 2] as u32) << 16);
+    word = word & (4294967295 - (((1 as u32) << 14) - 1) * ((1 as u32) << shift));
+    word = word | ((value as u32) << shift);
+    bytes[at] = (word % 256) as u8;
+    bytes[at + 1] = ((word / 256) % 256) as u8;
+    bytes[at + 2] = ((word / 65536) % 256) as u8;
+}
+
+fn packed_fixture(): [512]u8 {
+    var bytes = complete_fixture();
+    const model: [12]u8 = [78, 73, 75, 79, 78, 32, 90, 32, 54, 95, 50, 0];
+    entry(bytes[0..], 10, 272, 2, 12, 64);
+    var i: usize = 0;
+    while i < 12 {
+        bytes[64 + i] = model[i];
+        i = i + 1;
+    }
+    entry(bytes[0..], 22, 274, 3, 1, 1);
+    put32(bytes[0..], 142 + 8, 456);
+    put32(bytes[0..], 166 + 8, 32);
+    entry(bytes[0..], 280 + 20, 0x0093, 3, 1, 10);
+    const first: [4]u16 = [1, 2, 3, 4];
+    const second: [4]u16 = [16383, 8738, 4369, 2730];
+    i = 0;
+    while i < 4 {
+        put_packed_sample(bytes[0..], 456, i, first[i]);
+        put_packed_sample(bytes[0..], 472, i, second[i]);
+        i = i + 1;
+    }
+    return bytes;
+}
+
 test "Z8 NEF storage probe identifies bounded single-strip Bayer data" {
     const source = fixture();
     const storage = nef_source.inspect(source[0..].ptr as! *const u8, 240);
@@ -179,6 +219,31 @@ test "Z8 NEF source decodes and normalizes a bounded synthetic mosaic" {
     assert(untouched[0] == 9.0 and untouched[3] == 9.0);
 }
 
+test "Z6 II packed NEF source inspection binds its storage variant" {
+    const source = packed_fixture();
+    const inspected = nef_source.inspect_source(source[0..]);
+    assert(inspected.status == 0);
+    assert(inspected.storage.camera == NefCamera.nikon_z6_ii as u32);
+    assert(inspected.storage.encoding == 2);
+    assert(inspected.storage.strip_bytes == 32 and inspected.storage.orientation == 1);
+}
+
+test "Z6 II packed NEF source decodes padded rows and selects its profile" {
+    const source = packed_fixture();
+    var samples: [8]u16 = [0] ** 8;
+    var normalized: [4]f32 = [9.0] ** 4;
+    const result = nef_mosaic.decode_normalized(source[0..], samples[0..], normalized[0..],
+        8, no_cancel, 0
+    );
+    assert(result.status == 0 and result.width == 2 and result.height == 2);
+    assert(samples[0] == 1 and samples[1] == 2 and samples[4] == 16383 and samples[5] == 8738);
+    assert(normalized[0] == ((2 as f32) - (64 as f32)) / ((15311 as f32) - (64 as f32)));
+    assert(normalized[1] == ((3 as f32) - (64 as f32)) / ((15311 as f32) - (64 as f32)));
+    assert(normalized[2] == ((8738 as f32) - (64 as f32)) / ((15311 as f32) - (64 as f32)));
+    assert(normalized[3] == ((4369 as f32) - (64 as f32)) / ((15311 as f32) - (64 as f32)));
+    assert(result.camera_to_xyz_d50[0] != 0.0);
+}
+
 test "Z8 NEF headless preview uses the checked source and color route" {
     const source = complete_fixture();
     var samples: [8]u16 = [0] ** 8;
@@ -194,6 +259,20 @@ test "Z8 NEF headless preview uses the checked source and color route" {
     assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
         output[0..], 3, 2, 0.0, no_cancel, 0
     ) == 4);
+}
+
+test "Z6 II packed NEF headless preview uses the checked source and profile" {
+    const source = packed_fixture();
+    var samples: [8]u16 = [0] ** 8;
+    var normalized: [4]f32 = [0.0] ** 4;
+    var output: [16]u8 = [0] ** 16;
+    assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
+        output[0..], 2, 2, 0.0, no_cancel, 0
+    ) == 0);
+    assert(output[3] == 255 and output[7] == 255 and output[15] == 255);
+    assert(nef_pipeline.render(source[0..], samples[0..], normalized[0..],
+        output[0..], 2, 2, 0.0, cancel, 0
+    ) == 7);
 }
 
 test "Z8 NEF RGB16 uses the same scene rendering and bounds" {
@@ -257,4 +336,52 @@ test "Z8 NEF headless export produces profiled RGB16 TIFF bytes" {
         cancel, 0
     ) == 7);
     assert(untouched[0] == 9 and untouched[3211] == 9);
+}
+
+test "Z8 NEF developed TIFF applies the saved Detail controls" {
+    const source = complete_fixture();
+    const icc = fs.read_bytes("src/engine/assets/sRGB2014.icc") catch (error) {
+        assert(false);
+        return;
+    };
+    var samples: [8]u16 = [0] ** 8;
+    var normalized: [4]f32 = [0.0] ** 4;
+    var working: [12]f64 = [0.0] ** 12;
+    var rgb16: [12]u16 = [0] ** 12;
+    var output: [3212]u8 = [0] ** 3212;
+    var controls: preview_develop_plan.Controls = {
+        exposure_tenths: 0,
+        contrast_percent: 0,
+        shadows_percent: 0,
+        highlights_percent: 0,
+        blacks_percent: 0,
+        whites_percent: 0,
+        warmth_percent: 0,
+        tint_percent: 0,
+        vibrance_percent: 0,
+        saturation_percent: 0,
+        clarity_percent: 0,
+        texture_percent: 0
+    };
+    assert(nef_tiff16_pipeline.render_developed(source[0..], samples[0..],
+        normalized[0..], working[0..], rgb16[0..], icc[..], output[0..],
+        controls, no_cancel, 0
+    ) == 0);
+    const neutral = rgb16;
+    controls.exposure_tenths = 5;
+    controls.texture_percent = 10;
+    assert(nef_tiff16_pipeline.render_developed(source[0..], samples[0..],
+        normalized[0..], working[0..], rgb16[0..], icc[..], output[0..],
+        controls, no_cancel, 0
+    ) == 0);
+    var changed = false;
+    var channel: usize = 0;
+    while channel < 12 {
+        if rgb16[channel] != neutral[channel] {
+            changed = true;
+        }
+        channel = channel + 1;
+    }
+    assert(changed);
+    assert(tiff.u16le(output[0..].ptr as! *const u8, 3188) == rgb16[0]);
 }

@@ -1,4 +1,5 @@
-// Common handoff from a format-specific RAW decoder to a headless render plan.
+// Common handoff after format-specific sensor decode and normalization to a
+// headless render plan.
 // The caller-owned image is a cropped, row-major, camera-linear Bayer f32
 // mosaic. width/height and CFA use the unrotated cropped sensor coordinates.
 // CFA entries are the 2x2 color indices (0 red, 1 green, 2 blue).

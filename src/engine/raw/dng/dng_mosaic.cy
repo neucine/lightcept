@@ -19,7 +19,7 @@ pub struct DngMosaicSize {
 }
 
 // Resource contract for caller-owned scratch. A successful result describes
-// unsigned stored sensor codes and cropped scene-linear f32 sample counts.
+// unsigned stored sensor codes and cropped camera-linear Bayer f32 sample counts.
 pub fn inspect(source: []const u8, max_pixels: usize): DngMosaicSize {
     var result: DngMosaicSize = {
         stored_pixels: 0,

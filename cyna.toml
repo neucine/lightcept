@@ -1,0 +1,9 @@
+name = "lightcept_core"
+version = "0.1.0"
+src = "src"
+type = "staticlib"
+entry = "src/lib.cy"
+
+[build]
+target = "native"
+opt = "release"

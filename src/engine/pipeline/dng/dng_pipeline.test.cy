@@ -120,7 +120,7 @@ test "Ricoh compressed DNG baseline composition renders a bounded frame" {
     // Same source, route, and dimensions as the Rust product preview pin.
     assert(total == 78298);
     assert(weighted == 26102800);
-    const expected = fs.read_bytes("qualification/fixtures/ricoh-spatial-headroom-v5-16x10.rgba8") catch (error) {
+    const expected = fs.read_bytes("src/engine/tests/fixtures/ricoh-spatial-headroom-v5-16x10.rgba8") catch (error) {
         assert(false);
         return;
     };
@@ -174,7 +174,7 @@ test "Ricoh compressed DNG baseline composition renders a bounded frame" {
     assert(spatial_camera_pipeline.prepare_working_preview(camera[0..camera.len()], prepared.width, prepared.height, prepared.camera_to_xyz_d50, prepared.orientation, working[0..], 16, 10, no_cancel, 0) == 0);
     var fast: [640]u8 = [0] ** 640;
     assert(spatial_camera_pipeline.render_prepared_raw(working[0..].ptr as! *const f64, 480, fast[0..].ptr as! *u8, 640, 16, 10, prepared.baseline_exposure_ev, 0.0, 1.0, no_cancel, 0) == 0);
-    const expected_neutral = fs.read_bytes("qualification/fixtures/ricoh-spatial-headroom-v5-16x10.rgba8") catch (error) {
+    const expected_neutral = fs.read_bytes("src/engine/tests/fixtures/ricoh-spatial-headroom-v5-16x10.rgba8") catch (error) {
         assert(false);
         return;
     };
@@ -196,5 +196,15 @@ test "Ricoh compressed DNG baseline composition renders a bounded frame" {
         assert(fast[i] == output[i]);
         i = i + 1;
     }
+    assert(spatial_camera_pipeline.render_prepared_tone(working[0..].ptr as! *const f64, 480, fast[0..].ptr as! *u8, 640, 16, 10, prepared.baseline_exposure_ev, 0.0, 1.0, 0.6, -0.6, no_cancel, 0) == 0);
+    var tone_changed: usize = 0;
+    i = 0;
+    while i < 640 {
+        if fast[i] != expected_neutral[i] {
+            tone_changed = tone_changed + 1;
+        }
+        i = i + 1;
+    }
+    assert(tone_changed > 0);
 
 }

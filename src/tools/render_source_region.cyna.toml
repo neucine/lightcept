@@ -1,0 +1,9 @@
+name = "lightcept_source_region"
+version = "0.1.0"
+src = ".."
+type = "exe"
+entry = "render_source_region.cy"
+
+[build]
+target = "native"
+opt = "release"

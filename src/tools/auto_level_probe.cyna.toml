@@ -1,0 +1,9 @@
+name = "lightcept_auto_level_probe"
+version = "0.1.0"
+src = ".."
+type = "exe"
+entry = "auto_level_probe.cy"
+
+[build]
+target = "native"
+opt = "release"

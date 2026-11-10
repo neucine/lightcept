@@ -22,6 +22,7 @@ pub enum Highlight: u32 {
 pub enum OutputDepth: u32 {
     rgba8 = 8,
     rgb16 = 16,
+    working_f64 = 64,
 }
 pub enum Orientation: u32 {
     top_left = 1,

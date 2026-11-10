@@ -1,0 +1,29 @@
+<template>
+  <button type="button" :class="className()" :aria-label="props.label" :disabled="props.disabled" @click="press"></button>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    label: string;
+    glyph: string;
+    disabled: boolean;
+    compact: boolean;
+  }
+  export let props: Props;
+  function className() {
+    const glyph = props.glyph === '+' ? 'plus' : 'minus';
+    return props.compact ? `step compact ${glyph}` : `step ${glyph}`;
+  }
+  function press() { emit('press', null); }
+</script>
+
+<style>
+  .step { --step-size: 18px; --glyph-length: 8px; position: relative; display: inline-flex; flex: 0 0 var(--step-size); align-items: center; justify-content: center; box-sizing: border-box; width: var(--step-size); height: var(--step-size); padding: 0; border: 1px solid #425145; border-radius: 50%; background: #263129; color: #c5d5c1; cursor: pointer; }
+  .step.compact { --step-size: 15px; --glyph-length: 7px; }
+  .step::before, .step.plus::after { content: ""; position: absolute; top: 50%; left: 50%; border-radius: 1px; background: currentColor; transform: translate(-50%, -50%); }
+  .step::before { width: var(--glyph-length); height: 1px; }
+  .step.plus::after { width: 1px; height: var(--glyph-length); }
+  .step:hover:enabled { background: #354338; }
+  .step:disabled { cursor: default; opacity: .45; }
+  .step:focus-visible { outline: 2px solid #d2e5bd; outline-offset: 2px; }
+</style>

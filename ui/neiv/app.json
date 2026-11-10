@@ -1,0 +1,22 @@
+{
+  "id": "dev.neucine.lightcept",
+  "name": "Lightcept",
+  "version": "0.1.2",
+  "icon": "lightcept.icns",
+  "entry": "index.html",
+  "capabilities": [
+    "dialog.open",
+    "dialog.save"
+  ],
+  "nativePlugin": "LightceptPreviewPlugin",
+  "nativeSources": [
+    "native/preview_plugin.m",
+    "native/preview_zoom_view.m"
+  ],
+  "resources": [
+    {"source": "build/lightcept-export-tiff", "target": "lightcept-export-tiff"},
+    {"source": "build/lightcept-source-region", "target": "lightcept-source-region"},
+    {"source": "build/lightcept-fitted-preview", "target": "lightcept-fitted-preview"},
+    {"source": "build/sRGB2014.icc", "target": "sRGB2014.icc"}
+  ]
+}

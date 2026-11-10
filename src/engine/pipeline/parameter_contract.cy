@@ -34,10 +34,16 @@ fn entry(stage: string, stage_id: u32, index: u32, name: string, units: string, 
     };
 }
 
-// Kinds: 1 fused working sRGB, 2 contrast working sRGB, 3 split SDR output.
+pub enum WorkingPlanKind: u32 {
+    fused_working_srgb = 1,
+    contrast_working_srgb = 2,
+    split_sdr_output = 3,
+}
+
+// The wire API retains these numeric values.
 // Output stages have no parameters in these plans.
 pub fn rows(plan_kind: u32): [:]ParameterEntry {
-    if plan_kind == 2 {
+    if plan_kind == WorkingPlanKind.contrast_working_srgb as u32 {
         return [
             entry("exposure", 1, 0, "ev", "EV", pipeline.working_exposure_min(), pipeline.working_exposure_max(), 0.0),
             entry("working_white", 2, 1, "red_gain", "gain", pipeline.working_gain_min(), pipeline.working_gain_max(), 1.0),
@@ -81,7 +87,7 @@ fn describe_working_plan_parameters(plan_kind: u32, output: *u8, output_len: usi
     if output_len as usize != max_parameters * descriptor_bytes or count_len as usize != 1 or version_len as usize != 1 {
         return 3;
     }
-    if plan_kind < 1 or plan_kind > 3 {
+    if plan_kind < WorkingPlanKind.fused_working_srgb as u32 or plan_kind > WorkingPlanKind.split_sdr_output as u32 {
         return 4;
     }
     const parameters = rows(plan_kind as u32);

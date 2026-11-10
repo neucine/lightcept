@@ -8,16 +8,11 @@ plan/
 node_modules/
 __pycache__/
 *.pyc
-archive/tauri/dist/
-archive/tauri/src-tauri/gen/
 /corpus
 /log
 .DS_Store
+*.dSYM/
 .claude/
-/craft-fonts
 # nix build / nix develop
 /result
 /result-*
-# model weights are never committed (SAM 3: docs/ai-masks.md)
-*.safetensors
-*.safetensors.part

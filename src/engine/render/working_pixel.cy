@@ -1,6 +1,12 @@
 import .engine.develop.exposure;
 import .engine.develop.linear_chroma;
 import .engine.develop.contrast;
+import .engine.develop.shadows;
+import .engine.develop.highlights;
+import .engine.develop.black_point;
+import .engine.develop.whites;
+import .engine.develop.vibrance;
+import .engine.color.relative_white;
 import .engine.color.white_balance;
 import .engine.color.output_color;
 
@@ -38,6 +44,79 @@ pub fn encode_working_pixel_with_contrast(red: f64, green: f64, blue: f64, plan:
         red: output_color.encode_channel(adjusted.red, adjusted.green, adjusted.blue, 0),
         green: output_color.encode_channel(adjusted.red, adjusted.green, adjusted.blue, 1),
         blue: output_color.encode_channel(adjusted.red, adjusted.green, adjusted.blue, 2),
+    };
+}
+
+// Preview tone order v1: exposure, shadows, contrast, highlights, output.
+// Zero strengths preserve the established exposure/contrast encoder exactly.
+pub fn encode_working_pixel_with_tone(red: f64, green: f64, blue: f64, plan: WorkingSrgbPlan, slope: f64, shadow_strength: f64, highlight_strength: f64): EncodedRgb {
+    if shadow_strength == 0.0 and highlight_strength == 0.0 {
+        return encode_working_pixel_with_contrast(red, green, blue, plan, slope);
+    }
+    const gain = output_color.exposure_gain(plan.exposure_ev);
+    const exposed_red = exposure.apply(red, gain);
+    const exposed_green = exposure.apply(green, gain);
+    const exposed_blue = exposure.apply(blue, gain);
+    const shadow = shadows.apply(exposed_red, exposed_green, exposed_blue, shadow_strength);
+    const contrasted = contrast.apply(shadow.red, shadow.green, shadow.blue, slope);
+    const highlight = highlights.apply(contrasted.red, contrasted.green, contrasted.blue, highlight_strength);
+    return {
+        red: output_color.encode_channel(highlight.red, highlight.green, highlight.blue, 0),
+        green: output_color.encode_channel(highlight.red, highlight.green, highlight.blue, 1),
+        blue: output_color.encode_channel(highlight.red, highlight.green, highlight.blue, 2)
+    };
+}
+
+// Preview tone order v2: exposure, black offset, shadows, contrast,
+// highlights, whites, output. Neutral endpoints preserve v1 exactly.
+pub fn encode_working_pixel_with_endpoints(red: f64, green: f64, blue: f64, plan: WorkingSrgbPlan, slope: f64, black_offset: f64, shadow_strength: f64, highlight_strength: f64, white_strength: f64): EncodedRgb {
+    if black_offset == 0.0 and white_strength == 0.0 {
+        return encode_working_pixel_with_tone(red, green, blue, plan, slope, shadow_strength, highlight_strength);
+    }
+    const gain = output_color.exposure_gain(plan.exposure_ev);
+    const black = black_point.apply(exposure.apply(red, gain), exposure.apply(green, gain), exposure.apply(blue, gain), black_offset);
+    const shadow = shadows.apply(black.red, black.green, black.blue, shadow_strength);
+    const contrasted = contrast.apply(shadow.red, shadow.green, shadow.blue, slope);
+    const highlight = highlights.apply(contrasted.red, contrasted.green, contrasted.blue, highlight_strength);
+    const white = whites.apply(highlight.red, highlight.green, highlight.blue, white_strength);
+    return {
+        red: output_color.encode_channel(white.red, white.green, white.blue, 0),
+        green: output_color.encode_channel(white.red, white.green, white.blue, 1),
+        blue: output_color.encode_channel(white.red, white.green, white.blue, 2)
+    };
+}
+
+// Relative white and vibrance extend the pinned endpoint path. Neutral color
+// values call that path directly, preserving all existing route-v1 bytes.
+pub fn encode_working_pixel_with_color(red: f64, green: f64, blue: f64,
+    plan: WorkingSrgbPlan, slope: f64, black_offset: f64,
+    shadow_strength: f64, highlight_strength: f64, white_strength: f64,
+    warmth_percent: i32, tint_percent: i32, vibrance_percent: i32,
+    saturation_percent: i32
+): EncodedRgb {
+    if warmth_percent == 0 and tint_percent == 0 and vibrance_percent == 0 and saturation_percent == 0 {
+        return encode_working_pixel_with_endpoints(red, green, blue, plan, slope,
+            black_offset, shadow_strength, highlight_strength, white_strength
+        );
+    }
+    const exposure_gain = output_color.exposure_gain(plan.exposure_ev);
+    const gains = relative_white.gains(warmth_percent, tint_percent);
+    const balanced_red = exposure.apply(red, exposure_gain) * gains.red;
+    const balanced_green = exposure.apply(green, exposure_gain) * gains.green;
+    const balanced_blue = exposure.apply(blue, exposure_gain) * gains.blue;
+    const black = black_point.apply(balanced_red, balanced_green, balanced_blue, black_offset);
+    const shadow = shadows.apply(black.red, black.green, black.blue, shadow_strength);
+    const contrasted = contrast.apply(shadow.red, shadow.green, shadow.blue, slope);
+    const highlight = highlights.apply(contrasted.red, contrasted.green, contrasted.blue, highlight_strength);
+    const white = whites.apply(highlight.red, highlight.green, highlight.blue, white_strength);
+    const vibrant = vibrance.apply(white.red, white.green, white.blue, (vibrance_percent as f64) / 100.0);
+    const saturated = linear_chroma.apply_native(vibrant.red, vibrant.green, vibrant.blue,
+        1.0 + (saturation_percent as f64) / 100.0
+    );
+    return {
+        red: output_color.encode_channel(saturated.red, saturated.green, saturated.blue, 0),
+        green: output_color.encode_channel(saturated.red, saturated.green, saturated.blue, 1),
+        blue: output_color.encode_channel(saturated.red, saturated.green, saturated.blue, 2)
     };
 }
 

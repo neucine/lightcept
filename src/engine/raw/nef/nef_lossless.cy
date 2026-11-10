@@ -25,8 +25,9 @@ fn next_bit(bits: &Bits): i32 {
     return ((bits.current / ((1 as u32) << bits.remaining)) % 2) as i32;
 }
 
-// Canonical lossless-14 table. Categories are the published LightCraft
-// clean-room table, also checked against our independently decoded Z8 source.
+// Canonical 14-bit lossless JPEG Huffman table (categories 0 through 14), as
+// used by Nikon lossless NEF streams and checked against our independently
+// decoded Z8 source.
 fn category(bits: &Bits): i32 {
     var code: u32 = 0;
     var length: u32 = 1;

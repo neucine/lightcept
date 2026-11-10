@@ -1,39 +1,38 @@
 # Lightcept documentation
 
-Use the documents below for current decisions and implementation work. The
-[archive](archive/README.md) preserves experiments, first variants, reviews, and
-superseded migration notes as historical evidence. A document in the archive
-does not define current routing, support, or acceptance policy.
+This directory contains the public documentation that ships with the Lightcept
+application and engine. Internal architecture records, decision history,
+diagnostic stage specifications, and native RAW qualification evidence live in
+the private `neucine/daydream` engineering repository under `projects/lightcept/`.
 
-## Architecture and delivery
+## Public documents
 
-| Document | Maintained purpose |
-| --- | --- |
-| [Native RAW editor architecture](architecture/lightcept-native-editor.md) | Product-wide document and editing model; Rust diagrams are historical. |
-| [Native RAW engine architecture](architecture/lightcept-native-raw-engine.md) | Imaging domains, stage ownership, safety and qualification; Rust routing sections are historical. |
-| [Engine boundary](architecture/lightcept-engine-boundary.md) | Current headless Cyna engine and Ceiv host boundary. |
-| [Cyna-first layout](architecture/cyna-first-layout.md) | Current Cyna-only source and host layering. |
-| [Native pipeline target](architecture/native-pipeline-target.md) | Semantic recipe, photographic plan, and execution plan. |
-| [Develop capability contract](architecture/develop-capability-contract.md) | Proposed control and stage semantics; review status is stated in the document. |
-| [Native engine execution plan](architecture/native-engine-execution-plan.md) | Living gates, current qualification scope, and next slices. |
-| [Ceiv migration](architecture/ceiv-migration.md) | Desktop framework integration and migration gates. |
-| [HNCS engine assessment](architecture/hncs-engine-assessment.md) | Research evidence and color-stage qualification decision. |
+- [Terminology](terminology.md) — canonical product, imaging, and support
+  vocabulary.
+- [Quiet Studio UX](product/quiet-studio-ux.md) — long-term intention editing
+  direction and interaction rules.
 
-New camera, format, and processing work should follow the architecture, update
-the execution plan and the relevant contract. Record exact-source qualification and reproducible
-evidence under [qualification](../qualification/README.md). Move completed
-experiments and one-off reviews to the archive after their conclusion is
-reflected in a maintained document. Preserve their provenance and links.
+## Architecture and qualification
 
-## Product and qualification
+The maintained engineering records are available to project contributors in
+the private `neucine/daydream` repository:
 
-- [Quiet Studio UX](product/quiet-studio-ux.md) — current product direction.
-- [Qualification index](../qualification/README.md) — current source routing
-  scope, evidence, and diagnostic candidates.
-- [RAW support closure](../qualification/raw-support-closure.md) — required
-  evidence for a new camera/format variant.
+- `projects/lightcept/docs/README.md` — architecture index
+- `projects/lightcept/docs/architecture/lightcept-engine-boundary.md` — engine boundary
+- `projects/lightcept/docs/architecture/native-pipeline-target.md` — native pipeline target
+- `projects/lightcept/docs/architecture/develop-capability-contract.md` — develop capability contract
+- `projects/lightcept/docs/plans/2026-11-10-native-engine-execution-plan.md` — native engine execution plan
+- `projects/lightcept/qualification/README.md` — qualification index
+- `projects/lightcept/qualification/raw-support-closure.md` — RAW support closure
 
-The current Nikon Z8 and shared working-stage candidate records remain under
-`qualification/`. Diagnostic work does not imply product qualification.
-Dated competitive research, completed milestones, stage notes, and historical
-qualification reports are discoverable from the [archive](archive/README.md).
+## Documentation rules
+
+State implemented behavior and qualification scope separately from a term's
+definition. Link to the exact source variant and evidence when claiming
+support. A diagnostic kernel or candidate route does not imply product
+qualification.
+
+New camera, format, and processing work should update the relevant contract,
+the execution plan, and the qualification record together. Completed
+experiments and superseded plans belong in the architecture repository's
+archive.

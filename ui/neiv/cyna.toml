@@ -1,0 +1,16 @@
+name = "lightcept_neiv"
+version = "0.1.2"
+src = "src"
+type = "staticlib"
+entry = "src/lib.cy"
+
+[dependencies]
+neiv = { version = "0.1.3" }
+lightcept_core = { path = "../.." }
+
+[build]
+target = "native"
+# The pinned Cyna compiler emits a very large LLVM module for the current Neiv
+# app initializer; release -O2 can take over 40 minutes. Keep the preview host
+# on debug for predictable builds while the headless engine stays release.
+opt = "debug"

@@ -1,5 +1,5 @@
 import { CameraMosaic } from .engine.raw.camera_mosaic;
-import .engine.render.camera_preview;
+import .engine.render.mosaic_render;
 import .engine.pipeline.spatial_camera_pipeline;
 import .engine.develop.contrast;
 
@@ -89,7 +89,7 @@ pub fn render_rgba8(image: CameraMosaic, normalized: []const f32,
     if mode == fitted_mhc_v1 {
         demosaic_version = 2;
     }
-    return camera_preview.render_oriented_rgba8(normalized,
+    return mosaic_render.render_oriented_rgba8(normalized,
         image.width, image.height, image.cfa, image.camera_to_xyz_d50,
         output, width, height, image.baseline_exposure_ev, edit.exposure_ev,
         demosaic_version, image.orientation, cancelled, context
@@ -112,7 +112,7 @@ pub fn render_rgb16(image: CameraMosaic, normalized: []const f32,
     not valid_mosaic(image, normalized, width, height, output.len(), 3) {
         return 4;
     }
-    return camera_preview.render_oriented_rgb16(normalized,
+    return mosaic_render.render_oriented_rgb16(normalized,
         image.width, image.height, image.cfa, image.camera_to_xyz_d50,
         output, width, height, image.baseline_exposure_ev, edit.exposure_ev,
         2, image.orientation, cancelled, context

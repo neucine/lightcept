@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: neucine/cyna
-          ref: e78889f16b36e9f6eb9d5c6fdcbd69bfede074bc
+          ref: b078a22f2e6c80a25b758703136f072571235c67
           token: ${{ secrets.CYNA_SOURCE_TOKEN }}
           path: target/cyna-toolchain/cyna
           persist-credentials: false
@@ -45,7 +45,7 @@ jobs:
       - name: Check and test Cyna source
         run: |
           target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src --check
-          target/cyna-toolchain/cyna/zig-out/bin/cyna check src
+          target/cyna-toolchain/cyna/zig-out/bin/cyna check .
           python3 scripts/test-cyna-native.py
       - name: Test qualification tools
         run: |

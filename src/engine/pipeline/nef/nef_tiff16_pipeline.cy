@@ -1,8 +1,9 @@
 import .engine.raw.nef.nef_source;
 import .engine.pipeline.nef.nef_pipeline;
 import .engine.tiff.rgb16_writer;
+import .engine.pipeline.preview_develop_plan;
 
-// Headless Z8 lossless NEF to Classic TIFF RGB16 v1. The caller owns the
+// Headless Nikon NEF to Classic TIFF RGB16 v1. The caller owns the
 // immutable source and output ICC bytes, exact stored/cropped scratch, encoded
 // RGB16 samples, and TIFF output bytes. No filesystem or product types enter
 // this route. The output is valid only after status 0; a caller should publish
@@ -35,4 +36,53 @@ pub fn render(source: []const u8, samples: []u16, normalized: []f32,
         return rendered;
     }
     return rgb16_writer.encode(rgb16, width, height, icc, tiff, cancelled, context);
+}
+
+// Full visual-size RGB16 TIFF with the same twelve develop controls as Neiv's
+// fitted preview. The source, scratch, ICC and output buffers are caller-owned.
+// On any failure the TIFF buffer is invalid and must not be published.
+pub fn render_developed(source: []const u8, samples: []u16,
+    normalized: []f32, working: []f64, rgb16: []u16, icc: []const u8,
+    tiff: []u8, controls: preview_develop_plan.Controls,
+    cancelled: fn (usize): bool, context: usize
+): i32 {
+    const info = nef_source.inspect_source(source);
+    if info.status != 0 {
+        return info.status;
+    }
+    var width = info.maker.crop[2] as usize;
+    var height = info.maker.crop[3] as usize;
+    if info.storage.orientation >= 5 {
+        width = info.maker.crop[3] as usize;
+        height = info.maker.crop[2] as usize;
+    }
+    const plan = rgb16_writer.layout(width, height, icc.len());
+    if plan.status != 0 {
+        return plan.status;
+    }
+    if samples.len() != (info.storage.width as usize) * (info.storage.height as usize) or
+    normalized.len() != (info.maker.crop[2] as usize) * (info.maker.crop[3] as usize) or
+    working.len() != width * height * 3 or rgb16.len() != working.len() or
+    tiff.len() != plan.total_bytes {
+        return 4;
+    }
+    if not preview_develop_plan.valid(controls) {
+        return 5;
+    }
+    const prepared = nef_pipeline.prepare_working_full(source, samples,
+        normalized, working, width, height, cancelled, context
+    );
+    if prepared != 0 {
+        return prepared;
+    }
+    const rendered = preview_develop_plan.render_rgb16(working.ptr,
+        working.len(), rgb16.ptr, rgb16.len(), width, height, 0.0,
+        controls, cancelled, context
+    );
+    if rendered != 0 {
+        return rendered;
+    }
+    return rgb16_writer.encode(rgb16, width, height, icc, tiff,
+        cancelled, context
+    );
 }

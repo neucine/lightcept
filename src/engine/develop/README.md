@@ -3,9 +3,10 @@
 All 60 planned photographic develop capabilities form one logical develop
 catalog. The [stage manifest](../pipeline/develop_stage_manifest.cy) declares
 their names, domains, and composition policy. The
-[kernel audit](../../../docs/architecture/develop-kernel-audit.md) lists each
-stage's implementation, tests, contract, and semantic review, grouped by the
-families below.
+`projects/lightcept/docs/investigations/2026-11-10-develop-kernel-audit.md`
+record in the private `neucine/daydream` repository lists each stage's
+implementation, tests, contract, and semantic review, grouped by the families
+below.
 
 | Family | Stages | Kernel owners |
 | --- | ---: | --- |
@@ -20,6 +21,6 @@ families below.
 
 These are catalog families, not import or pixel-domain boundaries. Shared
 kernels stay at their component roots as required by the
-[engine boundary](../../../docs/architecture/lightcept-engine-boundary.md).
+engine boundary in `projects/lightcept/docs/architecture/lightcept-engine-boundary.md`.
 Format-specific modules stay in their format folders. The develop manifest
 composes and validates stages; each component owns its own pixel math.

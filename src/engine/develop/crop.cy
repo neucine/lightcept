@@ -3,7 +3,7 @@ import .engine.core.core;
 // Scene-linear Rec.2020/D65 integer crop v1. Pixel centers retain their
 // source values exactly. The caller keeps the uncropped source immutable.
 pub const algorithm_version: u32 = 1;
-pub const maximum_pixels: usize = 16777216;
+pub const maximum_pixels: usize = 50000000;
 
 pub struct CropRect {
     pub version: u32;
@@ -103,6 +103,50 @@ pub fn apply(input: []const f32, source_width: usize, source_height: usize,
             output[output_index] = input[source_index];
             output[output_index + 1] = input[source_index + 1];
             output[output_index + 2] = input[source_index + 2];
+            column = column + 1;
+        }
+        row = row + 1;
+    }
+    return 0;
+}
+
+// Full-resolution scene-linear Rec.2020/D65 f64 variant. Input and output
+// are disjoint caller-owned buffers; output is invalid after any failure.
+// Statuses and cancellation points match apply.
+pub fn apply_f64(input: []const f64, source_width: usize,
+    source_height: usize, rect: CropRect, output: []f64,
+    cancelled: fn (usize): bool, context: usize
+): u32 {
+    if not valid(rect, source_width, source_height) {
+        return 1;
+    }
+    if input.len() != source_width * source_height * 3 or
+    output.len() != rect.width * rect.height * 3 {
+        return 2;
+    }
+    var row: usize = 0;
+    while row < source_height {
+        if cancelled(context) {
+            return 7;
+        }
+        var column: usize = 0;
+        while column < source_width * 3 {
+            if not core.finite_sample64(input[row * source_width * 3 + column]) {
+                return 3;
+            }
+            column = column + 1;
+        }
+        row = row + 1;
+    }
+    row = 0;
+    while row < rect.height {
+        if cancelled(context) {
+            return 7;
+        }
+        var column: usize = 0;
+        while column < rect.width * 3 {
+            output[row * rect.width * 3 + column] =
+            input[((rect.top + row) * source_width + rect.left) * 3 + column];
             column = column + 1;
         }
         row = row + 1;

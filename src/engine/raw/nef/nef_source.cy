@@ -1,12 +1,19 @@
 import .engine.tiff.tiff;
 import .engine.raw.nef.nef_makernote;
-import { NefMakerMetadata } from .engine.raw.nef.nef_makernote;
+import { NefMakerMetadata, encoding_lossless_huffman, encoding_packed_14 } from .engine.raw.nef.nef_makernote;
 
-// Nikon Z8 Classic TIFF storage probe v1. This is a container boundary only:
-// maker-note seeds, crop, black levels, and camera characterization are separate
-// requirements before a source can enter the product render route.
+// Nikon Classic TIFF storage probe v1 for the qualified Z8 lossless and Z6 II
+// packed 14-bit layouts. This is a container boundary only: maker-note seeds,
+// crop, black levels, and camera characterization are separate requirements
+// before a source can enter the product render route.
 // Status: 0 supported storage, 1 malformed, 2 unsupported layout, 3 limit,
-// 6 not a Z8 NEF. Offsets and lengths are bytes; dimensions are photosites.
+// 6 unrecognized NEF model. Offsets and lengths are bytes; dimensions are
+// photosites.
+pub enum NefCamera: u32 {
+    nikon_z8 = 1,
+    nikon_z6_ii = 2,
+}
+
 pub struct NefStorage {
     pub width: u32;
     pub height: u32;
@@ -14,6 +21,8 @@ pub struct NefStorage {
     pub strip_bytes: u32;
     pub orientation: u32;
     pub cfa: u32;
+    pub camera: u32;
+    pub encoding: u32;
     pub status: i32;
 }
 
@@ -37,6 +46,8 @@ fn empty(status: i32): NefStorage {
         strip_bytes: 0,
         orientation: 1,
         cfa: 0,
+        camera: 0,
+        encoding: 0,
         status: status
     };
 }
@@ -90,6 +101,31 @@ fn value(input: *const u8, offset: usize, tag: u16): ?u32 {
     return none;
 }
 
+fn model_matches(input: *const u8, length: usize, entry: Entry, label: []const u8): bool {
+    if entry.kind != 2 or entry.count != label.len() as u32 or
+    not tiff.has_range(length, entry.value as usize, label.len()) {
+        return false;
+    }
+    var index: usize = 0;
+    while index < label.len() {
+        if tiff.byte(input, entry.value as usize + index) != label[index] {
+            return false;
+        }
+        index = index + 1;
+    }
+    return true;
+}
+
+fn supported_encoding(camera: u32, encoding: u32): bool {
+    if camera == NefCamera.nikon_z8 as u32 {
+        return encoding == encoding_lossless_huffman;
+    }
+    if camera == NefCamera.nikon_z6_ii as u32 {
+        return encoding == encoding_packed_14;
+    }
+    return false;
+}
+
 pub fn inspect(input: *const u8, length: usize): NefStorage {
     if (input as! usize) == 0 or not tiff.has_range(length, 0, 8) {
         return empty(1);
@@ -105,17 +141,16 @@ pub fn inspect(input: *const u8, length: usize): NefStorage {
         const ignored = marker;
         return empty(6);
     }
+    var camera: u32 = 0;
     if find(input, root, 272) is model {
-        if model.kind != 2 or model.count != 10 or not tiff.has_range(length, model.value as usize, 10) {
+        const z8: [10]u8 = [78, 73, 75, 79, 78, 32, 90, 32, 56, 0];
+        const z6_ii: [12]u8 = [78, 73, 75, 79, 78, 32, 90, 32, 54, 95, 50, 0];
+        if model_matches(input, length, model, z8[0..]) {
+            camera = NefCamera.nikon_z8 as u32;
+        } else if model_matches(input, length, model, z6_ii[0..]) {
+            camera = NefCamera.nikon_z6_ii as u32;
+        } else {
             return empty(6);
-        }
-        const label: [10]u8 = [78, 73, 75, 79, 78, 32, 90, 32, 56, 0];
-        var i: usize = 0;
-        while i < 10 {
-            if tiff.byte(input, model.value as usize + i) != label[i] {
-                return empty(6);
-            }
-            i = i + 1;
         }
     } else {
         return empty(6);
@@ -265,6 +300,8 @@ pub fn inspect(input: *const u8, length: usize): NefStorage {
                     strip_bytes: bytes,
                     orientation: orientation,
                     cfa: cfa_bytes,
+                    camera: camera,
+                    encoding: 0,
                     status: 0
                 };
             }
@@ -274,8 +311,8 @@ pub fn inspect(input: *const u8, length: usize): NefStorage {
     return storage;
 }
 
-// Resolve the exact Z8 storage layout and its Nikon maker-note metadata in
-// one checked source view. No sensor codes or pixels are decoded here.
+// Resolve a qualified Nikon storage layout and its maker-note metadata in one
+// checked source view. No sensor codes or pixels are decoded here.
 pub fn inspect_source(source: []const u8): NefSource {
     const storage = inspect(source.ptr as! *const u8, source.len());
     var result: NefSource = {
@@ -305,7 +342,11 @@ pub fn inspect_source(source: []const u8): NefSource {
                 return result;
             }
             result.maker = nef_makernote.parse(source[at..at + note.count as usize], storage.width, storage.height);
+            result.storage.encoding = result.maker.encoding;
             result.status = result.maker.status;
+            if result.status == 0 and not supported_encoding(result.storage.camera, result.storage.encoding) {
+                result.status = 2;
+            }
             return result;
         }
     }

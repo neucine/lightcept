@@ -6,11 +6,16 @@ This writes a candidate policy only. Review it and run router tests before promo
 import argparse
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import runpy
 
 ROOT = Path(__file__).resolve().parents[1]
+QUALIFICATION = Path(os.environ.get(
+    "LIGHTCEPT_ARCH_ROOT",
+    ROOT.parent / "daydream" / "projects" / "lightcept",
+)) / "qualification"
 
 
 def sha(path):
@@ -54,7 +59,7 @@ def build(directory):
     precision = {
         'schema_version': 1, 'platforms': comparison['platforms'],
         'report_sha256': comparison['report_sha256'],
-        'cyna_toolchain_lock_sha256': sha(ROOT / 'toolchains/cyna.lock'),
+        'cyna_toolchain_lock_sha256': sha(ROOT / 'cyna-toolchain.lock'),
         'source_ids': [s['source'] for s in reports], 'measured_outputs': {},
         'measured_preview_rgb8_max_channel_delta': comparison['preview_rgb8_max_channel_delta'],
         'measured_export_rgb16_max_channel_delta': comparison['export_rgb16_max_channel_delta'],
@@ -75,7 +80,7 @@ def build(directory):
     precision_hash = digest('precision', precision)
     promotions = []
     for source in reports:
-        prior = ROOT / 'qualification/evidence/g4-candidate-integration-2026-10-21' / ('quality-' + source['source'].removesuffix('.DNG') + '.json')
+        prior = QUALIFICATION / 'evidence/g4-candidate-integration-2026-10-21' / ('quality-' + source['source'].removesuffix('.DNG') + '.json')
         quality = json.loads(prior.read_text())
         scene = quality['reference_scenes'][0]
         measured = next(s for s in g2 if s['source_sha256'] == source['source_sha256'])

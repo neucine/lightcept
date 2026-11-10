@@ -17,6 +17,55 @@ fn neutral_nodes(): [:]hsl_grading.GradeNode {
     return nodes;
 }
 
+test "eight color bands expand to a valid periodic HSL asset" {
+    var bands: [8]hsl_grading.GradeNode = [hsl_grading.neutral_node()] ** 8;
+    bands[0] = {
+        hue_degrees: 0.0,
+        chroma_gain: 1.6,
+        luminance_ev: 0.0
+    };
+    bands[7] = {
+        hue_degrees: 0.0,
+        chroma_gain: 1.0,
+        luminance_ev: 0.6
+    };
+    const expanded = hsl_grading.eight_band_nodes(bands);
+    assert(expanded.valid);
+    const asset: hsl_grading.GradeAsset = {
+        version: 1,
+        nodes: expanded.nodes[..]
+    };
+    assert(hsl_grading.valid(&asset));
+    assert(expanded.nodes[0].chroma_gain == 1.6);
+    assert(expanded.nodes[25].chroma_gain > 1.0 and expanded.nodes[25].chroma_gain < 1.6);
+    assert(expanded.nodes[11 * 25].luminance_ev > 0.0);
+    bands[3] = {
+        hue_degrees: 0.0,
+        chroma_gain: 2.1,
+        luminance_ev: 0.0
+    };
+    assert(not hsl_grading.eight_band_nodes(bands).valid);
+}
+
+test "versioned HSL editor values map signed percentages to bounded nodes" {
+    var edit = hsl_grading.neutral_eight_band_edit();
+    const neutral = hsl_grading.editor_nodes(edit);
+    assert(neutral.valid and neutral.nodes.len() == hsl_grading.node_count);
+    assert(neutral.nodes[0].hue_degrees == 0.0);
+    assert(neutral.nodes[0].chroma_gain == 1.0);
+    assert(neutral.nodes[0].luminance_ev == 0.0);
+    edit.hue_percent[0] = 100;
+    edit.saturation_percent[0] = -100;
+    edit.luminance_percent[0] = 100;
+    const changed = hsl_grading.editor_nodes(edit);
+    assert(changed.valid);
+    assert(changed.nodes[0].hue_degrees == 45.0);
+    assert(changed.nodes[0].chroma_gain == 0.0);
+    assert(changed.nodes[0].luminance_ev == 1.0);
+    edit.version = 2;
+    assert(not hsl_grading.editor_nodes(edit).valid);
+}
+
 test "HSL LUT has complete fixed dimensions and trilinear periodic hue" {
     var nodes = neutral_nodes();
     var h: usize = 0;

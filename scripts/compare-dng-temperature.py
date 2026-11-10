@@ -12,12 +12,17 @@ import base64
 import hashlib
 import json
 import math
+import os
 import re
 import urllib.request
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+QUALIFICATION = Path(os.environ.get(
+    "LIGHTCEPT_ARCH_ROOT",
+    ROOT.parent / "daydream" / "projects" / "lightcept",
+)) / "qualification"
 SDK_URL = "https://android.googlesource.com/platform/external/dng_sdk/+/refs/heads/android14-prebuilt-test/source/dng_temperature.cpp?format=TEXT"
 SDK_SHA256 = "39797f582384204dbe82bf37d17acc52073cc8db1da710d1f954fe7b37d16dc4"
 SDK_PATH = ROOT / "target/dng-sdk-reference/dng_temperature.cpp"
@@ -135,7 +140,7 @@ def main():
         args.sdk_source.parent.mkdir(parents=True, exist_ok=True)
         args.sdk_source.write_bytes(source)
     table = sdk_table(args.sdk_source.read_bytes())
-    manifest = json.loads((ROOT / "qualification/native-sources.json").read_text())
+    manifest = json.loads((QUALIFICATION / "native-sources.json").read_text())
     for profile in manifest["sources"]:
         if "expected_color_matrix1" not in profile:
             continue

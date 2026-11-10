@@ -1,0 +1,57 @@
+<template>
+  <div class="develop-slider">
+    <div class="control-heading">
+      <span class="name"><label :for="props.id">{{ props.name }}</label>
+        <button type="button" class="info" :id="`help-${props.id}`" :aria-label="`${props.name}: ${props.help}`"
+          @mouseenter="showHelp" @mouseleave="hideHelp" @focus="showHelp" @blur="hideHelp">ⓘ</button>
+      </span>
+      <span class="value-actions"><output>{{ props.displayValue }}</output><button #if="props.value !== (props.resetValue ?? 0)" type="button" class="reset" :aria-label="`Reset ${props.name}`" :disabled="props.disabled" @click="reset">↺</button></span>
+    </div>
+    <StepRange :id="props.id" :label="props.name" :describedBy="helpId()"
+      :value="props.value" :min="props.min" :max="props.max" :stepAmount="props.stepAmount" :disabled="props.disabled"
+      @preview="preview" @commit="commit" @step="step" @reset="reset" />
+    <div class="range-ends"><span>{{ props.lowLabel }}</span><span>{{ props.highLabel }}</span></div>
+  </div>
+</template>
+
+<script lang="ts">
+  import StepRange from "../fundamental/StepRange.weiv";
+  export interface Props {
+    id: string;
+    name: string;
+    help: string;
+    value: number;
+    resetValue?: number;
+    displayValue: string;
+    min: number;
+    max: number;
+    stepAmount: number;
+    lowLabel: string;
+    highLabel: string;
+    disabled: boolean;
+  }
+  export let props: Props;
+
+  function helpId() { return `help-${props.id}`; }
+  function preview(value: number) { emit('preview', { id: props.id, value }); }
+  function commit(value: number) { emit('commit', { id: props.id, value }); }
+  function step(delta: number) { emit('step', { id: props.id, delta }); }
+  function reset() { emit('reset', props.id); }
+  function showHelp() { emit('help', props.help); }
+  function hideHelp() { emit('hide-help', null); }
+</script>
+
+<style>
+  .develop-slider { margin: 0 0 19px; }
+  .control-heading { display: flex; justify-content: space-between; margin-bottom: 8px; color: #d4ddd1; font-size: 12px; }
+  .name { display: inline-flex; align-items: center; gap: 6px; }
+  .value-actions { display: inline-flex; align-items: center; gap: 7px; }
+  .reset { border: 0; padding: 0 2px; background: transparent; color: #a9c5a2; font-size: 16px; line-height: 1; }
+  .reset:hover:enabled, .reset:focus-visible { color: #e3f0d9; }
+  .reset:focus-visible { outline: 2px solid #d2e5bd; outline-offset: 2px; }
+  .info { border: 0; padding: 0; background: transparent; color: #91ab93; font-size: 11px; line-height: 1; cursor: help; }
+  .info:hover, .info:focus-visible { color: #d6e8ca; }
+  .info:focus-visible { border-radius: 2px; outline: 2px solid #d2e5bd; outline-offset: 2px; }
+  output { color: #bed2b4; font-variant-numeric: tabular-nums; }
+  .range-ends { display: flex; justify-content: space-between; gap: 4px; margin: 3px 30px 0; color: #708575; font-size: 9px; font-variant-numeric: tabular-nums; }
+</style>

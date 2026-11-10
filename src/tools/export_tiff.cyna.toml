@@ -1,0 +1,9 @@
+name = "lightcept_export_tiff"
+version = "0.1.0"
+src = ".."
+type = "exe"
+entry = "export_tiff.cy"
+
+[build]
+target = "native"
+opt = "release"

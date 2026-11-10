@@ -2,13 +2,19 @@
 """Package fixed G2 scene regions; no region selection from difference images."""
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+ARCH_ROOT = Path(os.environ.get(
+    "LIGHTCEPT_ARCH_ROOT",
+    ROOT.parent / "daydream" / "projects" / "lightcept",
+))
+QUALIFICATION = ARCH_ROOT / "qualification"
 BASE = ROOT / 'target/g2-reference'
 REVIEW = BASE / 'review'
-EVIDENCE = ROOT / 'qualification/evidence/g2-reference-parity-2026-10-21'
+EVIDENCE = QUALIFICATION / 'evidence/g2-reference-parity-2026-10-21'
 
 def run(args):
     subprocess.run(['magick', *map(str, args)], check=True, capture_output=True)
@@ -21,13 +27,16 @@ def sha(path):
         return digest.hexdigest()
 
 def artifact(path):
-    return {'path': str(path.relative_to(ROOT)), 'sha256': sha(path)}
+    try:
+        return {'path': str(path.relative_to(ROOT)), 'sha256': sha(path)}
+    except ValueError:
+        return {'path': str(path.relative_to(ARCH_ROOT)), 'sha256': sha(path)}
 
 def main():
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     REVIEW.mkdir(parents=True, exist_ok=True)
-    originals = json.loads((ROOT / 'qualification/evidence/g3-output-fidelity-2026-10-21/outputs.json').read_text())
-    manifest = json.loads((ROOT / 'qualification/native-sources.json').read_text())['sources']
+    originals = json.loads((QUALIFICATION / 'evidence/g3-output-fidelity-2026-10-21/outputs.json').read_text())
+    manifest = json.loads((QUALIFICATION / 'native-sources.json').read_text())['sources']
     reports = json.loads((BASE / 'report.json').read_text())
     for report in reports:
         source = next(s for s in manifest if s['file'] == report['source'])

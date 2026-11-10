@@ -1,14 +1,19 @@
 import .engine.raw.camera_mosaic;
 import .engine.raw.nef.nef_source;
 import .engine.raw.nef.nef_lossless;
+import .engine.raw.nef.nef_packed;
 import .engine.raw.nef.nef_sensor;
+import .engine.raw.nef.nef_makernote;
 import .engine.color.nef.nikon_z8_profile;
+import .engine.color.nef.nikon_z6_ii_profile;
+import { NefCamera } from .engine.raw.nef.nef_source;
 
-// Headless Z8 lossless NEF source-to-mosaic v1. Caller-owned sample buffer is
-// the full stored sensor raster; normalized is cropped camera-linear Bayer.
-// Both lengths are exact photosite counts. Output is valid only on status 0.
-// The source is immutable. Cancellation is checked at decode and normalize
-// row boundaries. Processing is bounded to 50 million stored photosites.
+// Headless Nikon NEF source-to-mosaic v1 for Z8 lossless Huffman and Z6 II
+// packed 14-bit storage. Caller-owned sample buffer is the full stored sensor
+// raster; normalized is cropped camera-linear Bayer. Both lengths are exact
+// photosite counts. Output is valid only on status 0. The source is immutable.
+// Cancellation is checked at decode and normalize row boundaries. Processing
+// is bounded to 50 million stored photosites.
 pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
     max_pixels: usize, cancelled: fn (usize): bool, context: usize
 ): camera_mosaic.CameraMosaic {
@@ -30,12 +35,20 @@ pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
         return camera_mosaic.failed(7);
     }
     const strip = source[storage.strip_offset as usize..storage.strip_offset as usize + storage.strip_bytes as usize];
-    const decoded = nef_lossless.decode(strip.ptr as! *const u8, strip.len() as usize,
-        storage.width as usize, storage.height as usize,
-        maker.seeds[0] as u32, maker.seeds[1] as u32,
-        maker.seeds[2] as u32, maker.seeds[3] as u32,
-        samples.ptr as! *u16, samples.len() as usize, cancelled, context
-    );
+    var decoded: i32 = 2;
+    if storage.encoding == nef_makernote.encoding_lossless_huffman {
+        decoded = nef_lossless.decode(strip.ptr as! *const u8, strip.len() as usize,
+            storage.width as usize, storage.height as usize,
+            maker.seeds[0] as u32, maker.seeds[1] as u32,
+            maker.seeds[2] as u32, maker.seeds[3] as u32,
+            samples.ptr as! *u16, samples.len() as usize, cancelled, context
+        );
+    } else if storage.encoding == nef_makernote.encoding_packed_14 {
+        decoded = nef_packed.decode(strip.ptr as! *const u8, strip.len() as usize,
+            storage.width as usize, storage.height as usize,
+            samples.ptr as! *u16, samples.len() as usize, cancelled, context
+        );
+    }
     if decoded != 0 {
         return camera_mosaic.failed(decoded);
     }
@@ -52,12 +65,25 @@ pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
         return camera_mosaic.failed(status);
     }
     var matrix: [9]f64 = [0.0] ** 9;
-    if nikon_z8_profile.camera_to_xyz_d50(maker.red_gain, maker.blue_gain) is values {
-        matrix = values;
-    } else {
+    var characterized = false;
+    if storage.camera == NefCamera.nikon_z8 as u32 {
+        if nikon_z8_profile.camera_to_xyz_d50(maker.red_gain, maker.blue_gain) is values {
+            matrix = values;
+            characterized = true;
+        }
+    } else if storage.camera == NefCamera.nikon_z6_ii as u32 {
+        if nikon_z6_ii_profile.camera_to_xyz_d50(maker.red_gain, maker.blue_gain) is values {
+            matrix = values;
+            characterized = true;
+        }
+    }
+    if not characterized {
         return camera_mosaic.failed(2);
     }
     const cropped_cfa = nef_sensor.cropped_cfa(storage.cfa, maker.crop[0], maker.crop[1]);
+    // The characterized matrix bakes in the as-shot channel gains, so the
+    // pre-matrix neutral is the reciprocal of those gains relative to green.
+    // Highlight reconstruction needs this value to restore clipped neutrals.
     return {
         width: maker.crop[2] as usize,
         height: maker.crop[3] as usize,
@@ -65,7 +91,7 @@ pub fn decode_normalized(source: []const u8, samples: []u16, normalized: []f32,
             (cropped_cfa >> 16) % 256, (cropped_cfa >> 24) % 256
         ],
         orientation: storage.orientation,
-        neutral: [1.0, 1.0, 1.0],
+        neutral: [1.0 / maker.red_gain, 1.0, 1.0 / maker.blue_gain],
         baseline_exposure_ev: 0.0,
         camera_to_xyz_d50: matrix,
         status: 0

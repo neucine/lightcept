@@ -4,10 +4,15 @@
 import argparse
 import hashlib
 import json
+import os
 import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+QUALIFICATION = Path(os.environ.get(
+    "LIGHTCEPT_ARCH_ROOT",
+    ROOT.parent / "daydream" / "projects" / "lightcept",
+)) / "qualification"
 COMPARE = runpy.run_path(str(ROOT / "scripts/compare-native-precision.py"))["compare"]
 
 
@@ -45,7 +50,7 @@ def main() -> None:
     parser.add_argument("linux_corpus", type=Path)
     parser.add_argument("output_dir", type=Path)
     args = parser.parse_args()
-    filenames = {entry["file"] for entry in json.loads((ROOT / "qualification/native-sources.json").read_text())["sources"]}
+    filenames = {entry["file"] for entry in json.loads((QUALIFICATION / "native-sources.json").read_text())["sources"]}
     args.output_dir.mkdir(parents=True, exist_ok=True)
     macos = args.output_dir / "macos-arm64.jsonl"
     linux = args.output_dir / "linux-aarch64.jsonl"

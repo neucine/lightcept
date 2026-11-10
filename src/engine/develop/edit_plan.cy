@@ -18,6 +18,12 @@ pub const edit_highlights: u32 = 6;
 pub const edit_vibrance: u32 = 7;
 pub const edit_whites: u32 = 8;
 const scene_linear_rec2020: u32 = 4;
+// These are the version-1 logical-plan codes. The control-contract transport
+// uses delta=0 and target=1; convert by meaning at any future integration.
+pub enum EditMode: u32 {
+    target = 1,
+    delta = 2,
+}
 pub const mode_target: u32 = 1;
 pub const mode_delta: u32 = 2;
 
@@ -159,7 +165,7 @@ pub fn compile(requests: [:]EditRequest): CompileResult {
         if found == available.len() {
             return rejected(1, index);
         }
-        if request.mode != mode_target and request.mode != mode_delta {
+        if request.mode != EditMode.target as u32 and request.mode != EditMode.delta as u32 {
             return rejected(2, index);
         }
         var current: f64 = 0.0;
@@ -188,7 +194,7 @@ pub fn compile(requests: [:]EditRequest): CompileResult {
             current = plan.vibrance_strength;
         }
         var value = request.value;
-        if request.mode == mode_delta {
+        if request.mode == EditMode.delta as u32 {
             value = current + request.value;
         }
         if not (value >= available[found].minimum and value <= available[found].maximum) {
