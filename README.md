@@ -40,18 +40,18 @@ room for future library or culling workflows.
 ## Requirements
 
 - macOS 15 or later, with Xcode Command Line Tools
-- Zig 0.17.0
 - Node.js 22
-- The pinned Cyna compiler (0.5.0) from `cyna-toolchain.lock`
+- Cyna 0.5.0, installed from [cyna.dev](https://cyna.dev/)
 - A Neiv checkout at `../neiv`, or set `LIGHTCEPT_NEIV_CLI` to its `neiv.mjs`
 
-The public build scripts fetch and build the pinned Cyna compiler for the host.
-Cyna and `zig-libs` source access is required if the repositories are private.
+The standard setup links the installed Cyna compiler into the project toolchain
+path. Reproducing the pinned compiler from source requires Zig 0.17.0 and source
+access to Cyna and `zig-libs` if those repositories are private.
 
 ## Build and run
 
 ```sh
-scripts/setup-cyna-toolchain.sh
+scripts/setup-installed-cyna.sh
 ui/neiv/build.sh
 open ui/neiv/build/NeivApp.app
 ```

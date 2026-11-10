@@ -5,9 +5,10 @@ active repository must stay free of Rust, Cargo, and the retired Rust adapters.
 
 ## Development setup
 
-1. Install Zig 0.17.0 and Node.js 22.
-2. Run `scripts/setup-cyna-toolchain.sh` to fetch and build the pinned Cyna
-   compiler.
+1. Install Node.js 22 and Cyna 0.5.0 from [cyna.dev](https://cyna.dev/).
+2. Run `scripts/setup-installed-cyna.sh` to link the installed compiler. To
+   reproduce the pinned compiler from source, install Zig 0.17.0 and run
+   `scripts/setup-cyna-toolchain.sh` instead.
 3. Keep a Neiv checkout at `../neiv`, or set `LIGHTCEPT_NEIV_CLI`.
 4. Contributors with access to the private `neucine/daydream` repository should
    read `projects/lightcept/docs/architecture/lightcept-engine-boundary.md`
