@@ -43,6 +43,8 @@ room for future library or culling workflows.
   Command Line Tools; the application targets macOS 15 or later
 - Node.js 22
 - Cyna 0.5.0, installed from [cyna.dev](https://cyna.dev/)
+- Z3 4.15.4 at `/opt/homebrew/opt/z3/lib/libz3.4.15.dylib`, required by the
+  Cyna 0.5.0 macOS LLVM tools
 - A Neiv checkout at `../neiv` with dependencies installed using
   `npm ci --prefix ../neiv/packages/neiv`, or set `LIGHTCEPT_NEIV_CLI` to its
   `neiv.mjs`

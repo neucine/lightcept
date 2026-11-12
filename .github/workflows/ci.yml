@@ -22,8 +22,19 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: target/neiv/packages/neiv/package-lock.json
-      - name: Install Cyna LLVM dependency
-        run: brew install z3
+      - name: Install pinned Cyna LLVM dependency
+        run: |
+          archive="$RUNNER_TEMP/z3-4.15.4-arm64-osx.zip"
+          curl -fsSL \
+            https://github.com/Z3Prover/z3/releases/download/z3-4.15.4/z3-4.15.4-arm64-osx-13.7.6.zip \
+            -o "$archive"
+          echo "8bb3439772cafd75240d61abf255e89122850bab93563d1283b048359ab4e88f  $archive" \
+            | shasum -a 256 -c -
+          unzip -q "$archive" -d "$RUNNER_TEMP/cyna-z3"
+          install -d /opt/homebrew/opt/z3/lib
+          install -m 0555 \
+            "$RUNNER_TEMP/cyna-z3/z3-4.15.4-arm64-osx-13.7.6/bin/libz3.dylib" \
+            /opt/homebrew/opt/z3/lib/libz3.4.15.dylib
       - name: Install Cyna 0.5.0
         run: |
           export HOME="${RUNNER_TEMP}/cyna-home"
