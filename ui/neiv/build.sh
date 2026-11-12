@@ -27,3 +27,5 @@ if [ ! -f "$neiv_cli" ]; then
     exit 1
 fi
 node "$neiv_cli" build "$app"
+python3 "$repo/scripts/check-neiv-bundle.py" \
+    "$app/build/NeivApp.app/Contents/Resources/web"

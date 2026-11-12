@@ -11,31 +11,34 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Require private Cyna source access
-        env:
-          CYNA_SOURCE_TOKEN: ${{ secrets.CYNA_SOURCE_TOKEN }}
-        run: |
-          if [[ -z "$CYNA_SOURCE_TOKEN" ]]; then
-            echo "CYNA_SOURCE_TOKEN needs read-only access to neucine/cyna and neucine/zig-libs" >&2
-            exit 1
-          fi
       - uses: actions/checkout@v4
         with:
           repository: neucine/cyna
           ref: b078a22f2e6c80a25b758703136f072571235c67
-          token: ${{ secrets.CYNA_SOURCE_TOKEN }}
           path: target/cyna-toolchain/cyna
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: neucine/zig-libs
           ref: a91b58271be94a4e402a856403fe0fa83add1709
-          token: ${{ secrets.CYNA_SOURCE_TOKEN }}
           path: target/cyna-toolchain/zig-libs
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: neucine/neiv
+          ref: 4a7a34c09420a0eb32b63151f10927f366915651
+          path: target/neiv
           persist-credentials: false
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: target/neiv/packages/neiv/package-lock.json
+      - name: Install pinned Neiv dependencies
+        run: npm ci --prefix target/neiv/packages/neiv --ignore-scripts --no-audit --no-fund
       - name: Build pinned Cyna compiler
         run: scripts/setup-cyna-toolchain.sh
         env:
@@ -52,3 +55,7 @@ jobs:
           python3 scripts/test-compare-camera-chart.py
           python3 scripts/test_analyze_camera_render.py
           python3 scripts/test_compare_native_precision.py
+      - name: Build native app
+        env:
+          LIGHTCEPT_NEIV_CLI: ${{ github.workspace }}/target/neiv/packages/neiv/bin/neiv.mjs
+        run: ui/neiv/build.sh

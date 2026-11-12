@@ -42,7 +42,9 @@ room for future library or culling workflows.
 - macOS 15 or later, with Xcode Command Line Tools
 - Node.js 22
 - Cyna 0.5.0, installed from [cyna.dev](https://cyna.dev/)
-- A Neiv checkout at `../neiv`, or set `LIGHTCEPT_NEIV_CLI` to its `neiv.mjs`
+- A Neiv checkout at `../neiv` with dependencies installed using
+  `npm ci --prefix ../neiv/packages/neiv`, or set `LIGHTCEPT_NEIV_CLI` to its
+  `neiv.mjs`
 
 The standard setup links the installed Cyna compiler into the project toolchain
 path. Reproducing the pinned compiler from source requires Zig 0.17.0 and source
@@ -69,6 +71,7 @@ scripts/check-boundaries.sh
 target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src ui --check
 target/cyna-toolchain/cyna/zig-out/bin/cyna check .
 python3 scripts/test-cyna-native.py
+ui/neiv/build.sh
 ```
 
 The boundary check enforces the Cyna engine's import ownership and keeps Rust
