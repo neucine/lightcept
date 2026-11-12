@@ -20,7 +20,7 @@ Run the focused tests for the code you touched, then the full repository checks:
 
 ```sh
 scripts/check-boundaries.sh
-target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src --check
+target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src ui --check
 target/cyna-toolchain/cyna/zig-out/bin/cyna check .
 python3 scripts/test-cyna-native.py
 ui/neiv/build.sh
