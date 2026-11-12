@@ -39,7 +39,8 @@ room for future library or culling workflows.
 
 ## Requirements
 
-- macOS 15 or later, with Xcode Command Line Tools
+- macOS 26 or later to build with the current Cyna toolchain, with Xcode
+  Command Line Tools; the application targets macOS 15 or later
 - Node.js 22
 - Cyna 0.5.0, installed from [cyna.dev](https://cyna.dev/)
 - A Neiv checkout at `../neiv` with dependencies installed using
