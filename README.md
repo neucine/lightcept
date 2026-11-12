@@ -66,7 +66,7 @@ slow; the headless engine and worker tools build as release artifacts.
 
 ```sh
 scripts/check-boundaries.sh
-target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src --check
+target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src ui --check
 target/cyna-toolchain/cyna/zig-out/bin/cyna check .
 python3 scripts/test-cyna-native.py
 ```

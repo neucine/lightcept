@@ -38,6 +38,6 @@
 - Run `scripts/check-boundaries.sh` after changing dependencies or engine-facing
   code. Format and check with the pinned Cyna compiler; run focused tests while
   iterating.
-- Before committing, run `cyna fmt src --check`, `cyna check .`,
+- Before committing, run `cyna fmt src ui --check`, `cyna check .`,
   `python3 scripts/test-cyna-native.py`, and `scripts/check-boundaries.sh` with
   the pinned compiler. On macOS, build `ui/neiv/build.sh` after Neiv changes.

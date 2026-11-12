@@ -44,7 +44,7 @@ jobs:
         run: scripts/check-boundaries.sh
       - name: Check and test Cyna source
         run: |
-          target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src --check
+          target/cyna-toolchain/cyna/zig-out/bin/cyna fmt src ui --check
           target/cyna-toolchain/cyna/zig-out/bin/cyna check .
           python3 scripts/test-cyna-native.py
       - name: Test qualification tools
