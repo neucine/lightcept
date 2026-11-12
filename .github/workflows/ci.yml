@@ -23,9 +23,11 @@ jobs:
           cache: npm
           cache-dependency-path: target/neiv/packages/neiv/package-lock.json
       - name: Install Cyna 0.5.0
-        env:
-          CYNA_INSTALL_ROOT: ${{ runner.temp }}/cyna
         run: |
+          export HOME="${RUNNER_TEMP}/cyna-home"
+          mkdir -p "$HOME"
+          export CYNA_INSTALL_ROOT="$HOME/.cyna"
+          echo "HOME=$HOME" >> "$GITHUB_ENV"
           sh -c 'curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.0 aarch64-apple-darwin'
           echo "$CYNA_INSTALL_ROOT/current/bin" >> "$GITHUB_PATH"
       - name: Link installed Cyna
