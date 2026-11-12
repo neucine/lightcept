@@ -13,36 +13,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: neucine/cyna
-          ref: b078a22f2e6c80a25b758703136f072571235c67
-          path: target/cyna-toolchain/cyna
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: neucine/zig-libs
-          ref: a91b58271be94a4e402a856403fe0fa83add1709
-          path: target/cyna-toolchain/zig-libs
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
           repository: neucine/neiv
           ref: 4a7a34c09420a0eb32b63151f10927f366915651
           path: target/neiv
           persist-credentials: false
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.17.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: target/neiv/packages/neiv/package-lock.json
+      - name: Install Cyna 0.5.0
+        env:
+          CYNA_INSTALL_ROOT: ${{ runner.temp }}/cyna
+        run: |
+          sh -c 'curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.0 aarch64-apple-darwin'
+          echo "$CYNA_INSTALL_ROOT/current/bin" >> "$GITHUB_PATH"
+      - name: Link installed Cyna
+        run: scripts/setup-installed-cyna.sh
       - name: Install pinned Neiv dependencies
         run: npm ci --prefix target/neiv/packages/neiv --ignore-scripts --no-audit --no-fund
-      - name: Build pinned Cyna compiler
-        run: scripts/setup-cyna-toolchain.sh
-        env:
-          LIGHTCEPT_CYNA_PRECHECKED_OUT: 1
       - name: Check native boundaries
         run: scripts/check-boundaries.sh
       - name: Check and test Cyna source
