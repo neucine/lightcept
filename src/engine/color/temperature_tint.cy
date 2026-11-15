@@ -1,4 +1,5 @@
 // Temperature/tint coordinate conversion, algorithm version 1.
+// Adapted from LightCraft color/cct.rs at b3d392b; see NOTICE.
 //
 // White points are placed on the Planckian locus with the polynomial
 // approximation published by Kim et al. for 1667 K through 25000 K. Outside
