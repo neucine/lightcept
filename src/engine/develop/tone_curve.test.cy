@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.tone_curve;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -232,7 +232,7 @@ test "curve rejects malformed assets and nonfinite samples" {
         strength: 1.0,
         nodes: identity
     };
-    const infinity = output_color.exposure_gain_native(1024.0);
+    const infinity = core.positive_infinity64();
     const invalid = tone_curve.apply(asset, infinity, 0.2, 0.2);
     assert(not invalid.valid and invalid.status == 2);
 }

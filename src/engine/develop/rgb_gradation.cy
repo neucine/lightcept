@@ -1,5 +1,6 @@
 import .engine.core.core;
 import .engine.core.sha256;
+import std.math;
 
 // Independently sampled RGB gradation v2. Input/output are normalized encoded
 // RGB channel values in [0,1] in the asset's declared color domain, at
@@ -443,14 +444,21 @@ pub fn apply_image(input: []const f32, width: usize, height: usize,
                     if not core.finite_sample(value) or value < 0.0 or value > 1.0 {
                         return 3;
                     }
-                    if pass == 1 {
-                        if channel == 0 {
-                            output[offset] = sample(asset.red[..], value as f64) as f32;
-                        } else if channel == 1 {
-                            output[offset + 1] = sample(asset.green[..], value as f64) as f32;
-                        } else {
-                            output[offset + 2] = sample(asset.blue[..], value as f64) as f32;
+                    var graded: f64 = 0.0;
+                    if channel == 0 {
+                        graded = sample(asset.red[..], value as f64);
+                    } else if channel == 1 {
+                        graded = sample(asset.green[..], value as f64);
+                    } else {
+                        graded = sample(asset.blue[..], value as f64);
+                    }
+                    const rounded = math.to_f32_rounded(graded);
+                    if rounded is next {
+                        if pass == 1 {
+                            output[offset + channel] = next;
                         }
+                    } else {
+                        return 4;
                     }
                     channel = channel + 1;
                 }

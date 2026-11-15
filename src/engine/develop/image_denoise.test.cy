@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.image_denoise;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -61,7 +61,7 @@ test "image denoise bounds change and rejects failures before writing" {
     assert(image_denoise.apply(input[0..], 2, 1, asset(),
         output[0..], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const bad: [3]f32 = [infinity, 0.2, 0.3];
     assert(image_denoise.apply(bad[0..], 1, 1, asset(),
         output[0..], no_cancel, 0

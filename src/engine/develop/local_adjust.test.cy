@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.local_adjust;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -60,7 +60,7 @@ test "local composite rejects failures before writing and cancellation" {
     assert(local_adjust.composite(base[0..], edited[0..], invalid_mask[0..], 1, 1,
         100, output[0..], no_cancel, 0
     ) == 3);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const invalid_edited: [3]f32 = [infinity, 0.4, 0.5];
     assert(local_adjust.composite(base[0..], invalid_edited[0..], mask[0..], 1, 1,
         100, output[0..], no_cancel, 0

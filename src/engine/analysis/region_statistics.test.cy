@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.analysis.region_statistics;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -45,7 +45,7 @@ test "region statistics reject bounds samples and cancellation without a partial
         height: 1
     };
     assert(region_statistics.measure(input[0..], 2, 1, outside, no_cancel, 0).status == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [6]f32 = [0.2, 0.2, 0.2, infinity, 0.3, 0.3];
     const bad = region_statistics.measure(nonfinite[0..], 2, 1, region, no_cancel, 0);
     assert(bad.status == 3 and bad.pixels == 0 and bad.mean_red == 0.0);

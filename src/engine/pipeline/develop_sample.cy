@@ -10,6 +10,7 @@ import .engine.develop.vibrance;
 import .engine.develop.tone_curve;
 import .engine.develop.channel_mixer;
 import .engine.color.output_color;
+import .engine.core.core;
 
 // Diagnostic scalar executor for the logical develop plan. Input and output
 // are signed scene-linear Rec.2020/D65 RGB. No clipping or output encoding.
@@ -29,8 +30,7 @@ pub struct SampleResult {
 }
 
 fn finite(value: f64): bool {
-    const infinity = output_color.exposure_gain_native(1024.0);
-    return value > -infinity and value < infinity;
+    return core.finite_sample64(value);
 }
 
 pub fn valid_plan(plan: edit_plan.DevelopPlan): bool {

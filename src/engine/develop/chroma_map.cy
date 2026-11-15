@@ -1,5 +1,6 @@
 import .engine.core.core;
 import .engine.core.sha256;
+import std.math;
 
 // Caller-supplied opponent-chroma map v1. RGB input/output are scene-linear
 // D65 reference-white units in [-0.25,8] and [-16,16], respectively. The
@@ -334,8 +335,13 @@ pub fn apply_image(input: []const f32, width: usize, height: usize,
                     if not finite_bounded(result[channel], 16.0) {
                         return 4;
                     }
-                    if pass == 1 {
-                        output[offset + channel] = result[channel] as f32;
+                    const rounded = math.to_f32_rounded(result[channel]);
+                    if rounded is value {
+                        if pass == 1 {
+                            output[offset + channel] = value;
+                        }
+                    } else {
+                        return 4;
                     }
                     channel = channel + 1;
                 }

@@ -166,9 +166,12 @@ pub fn apply(input: []const f32, clip: []const u8,
             while x < width {
                 const index = y * width + x;
                 if pass == 0 {
-                    const value = input[index] as f64;
-                    if not core.finite_sample(input[index]) or value < 0.0
-                    or value > 1.0 {
+                    const sample = input[index];
+                    if not core.finite_sample(sample) {
+                        return 3;
+                    }
+                    const value = sample as f64;
+                    if value < 0.0 or value > 1.0 {
                         return 3;
                     }
                     if clip[index] > 1 or (clip[index] == 1

@@ -1,4 +1,3 @@
-import .engine.color.output_color;
 import .engine.core.core;
 import std.math;
 
@@ -28,8 +27,7 @@ pub struct MixerResult {
 }
 
 fn finite(value: f64): bool {
-    const infinity = output_color.exposure_gain_native(1024.0);
-    return value > -infinity and value < infinity;
+    return core.finite_sample64(value);
 }
 
 fn bounded(value: f64): bool {

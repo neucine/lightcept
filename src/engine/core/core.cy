@@ -35,21 +35,22 @@ pub fn validate_rgb16_image(width: usize, height: usize, max_pixels: usize, inpu
 }
 
 pub fn finite_sample(value: f32): bool {
-    if value != value {
-        return false;
-    }
-    const sample: f64 = value as f64;
-    if sample >= 340282350000000000000000000000000000000.0 {
-        return false;
-    }
-    if sample < 0.0 and -sample >= 340282350000000000000000000000000000000.0 {
-        return false;
-    }
-    return true;
+    return value - value == 0.0;
 }
 
 // IEEE subtraction of a finite value from itself is zero; NaN and infinities
 // produce NaN. This avoids a native math dependency at the component boundary.
 pub fn finite_sample64(value: f64): bool {
     return value - value == 0.0;
+}
+
+// Exact positive infinity values for testing rejection of nonfinite samples.
+// These are IEEE 754 bit patterns, so constructing them does not depend on
+// overflow behavior in the hosted math library.
+pub fn positive_infinity32(): f32 {
+    return (2139095040 as u32) as! f32;
+}
+
+pub fn positive_infinity64(): f64 {
+    return (9218868437227405312 as u64) as! f64;
 }

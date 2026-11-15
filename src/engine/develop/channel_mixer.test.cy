@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.channel_mixer;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -71,7 +71,7 @@ test "mixer rejects invalid coefficients and nonfinite samples" {
     asset.blue_from_red = 1.01;
     const invalid = channel_mixer.apply(asset, 0.2, 0.3, 0.4);
     assert(not invalid.valid and invalid.status == 1);
-    const infinity = output_color.exposure_gain_native(1024.0);
+    const infinity = core.positive_infinity64();
     const bad_input = channel_mixer.apply(channel_mixer.neutral_asset(), infinity, 0.3, 0.4);
     assert(not bad_input.valid and bad_input.status == 2);
 }

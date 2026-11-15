@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.grain;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -67,7 +67,7 @@ test "grain rejects malformed input and cancellation before writing" {
     };
     assert(grain.apply(input[0..], 1, 1, invalid, output[0..], no_cancel, 0) == 1);
     assert(grain.apply(input[0..], 2, 1, valid, output[0..], no_cancel, 0) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const bad: [3]f32 = [infinity, 0.3, 0.4];
     assert(grain.apply(bad[0..], 1, 1, valid, output[0..], no_cancel, 0) == 3);
     assert(grain.apply(input[0..], 1, 1, valid, output[0..], cancel, 0) == 7);

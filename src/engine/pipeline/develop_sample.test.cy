@@ -1,3 +1,4 @@
+import .engine.core.core;
 import .engine.develop.edit_plan;
 import .engine.pipeline.develop_sample;
 import .engine.color.output_color;
@@ -74,7 +75,7 @@ test "scalar executor rejects altered contrast mapping" {
 }
 
 test "scalar executor rejects nonfinite input" {
-    const infinity = output_color.exposure_gain_native(1024.0);
+    const infinity = core.positive_infinity64();
     const pixel: develop_sample.SampleRgb = {
         red: infinity,
         green: 0.2,

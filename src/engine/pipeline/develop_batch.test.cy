@@ -1,7 +1,7 @@
+import .engine.core.core;
 import .engine.pipeline.develop_batch;
 import .engine.pipeline.develop_sample;
 import .engine.develop.edit_plan;
-import .engine.color.output_color;
 
 fn no_cancel(index: usize): bool {
     return false;
@@ -140,7 +140,7 @@ test "cancellation before commit preserves every output sample" {
 }
 
 test "invalid sample shape and budget preserve caller output" {
-    const infinity = output_color.exposure_gain_native(1024.0);
+    const infinity = core.positive_infinity64();
     const input: [2]develop_sample.SampleRgb = [{
             red: 0.1,
             green: 0.1,

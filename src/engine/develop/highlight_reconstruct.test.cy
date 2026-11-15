@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.highlight_reconstruct;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -64,7 +64,7 @@ test "RAW highlight reconstruct validates evidence input and cancellation" {
     assert(highlight_reconstruct.apply(input[0..], clip[0..], 2, 1,
         settings(), output[0..], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [1]f32 = [infinity];
     assert(highlight_reconstruct.apply(nonfinite[0..], clip[0..], 1, 1,
         settings(), output[0..], no_cancel, 0

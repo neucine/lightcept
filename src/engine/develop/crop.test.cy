@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.crop;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -55,7 +55,7 @@ test "crop rejects invalid extent input shape and cancellation" {
     bad.left = 0;
     assert(crop.apply(input[0..], 1, 1, bad, output[0..], no_cancel, 0) == 0);
     assert(crop.apply(input[0..], 2, 1, bad, output[0..], no_cancel, 0) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [3]f32 = [infinity, 0.2, 0.3];
     output[0] = 9.0;
     assert(crop.apply(nonfinite[0..], 1, 1, bad, output[0..], no_cancel, 0) == 3);

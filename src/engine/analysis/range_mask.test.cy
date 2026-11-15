@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.analysis.range_mask;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -85,7 +85,7 @@ test "range mask rejects malformed data without writing and polls cancellation" 
     var output: [2]f32 = [9.0, 9.0];
     assert(range_mask.build(input[0..], 2, 1, invalid, output[0..], no_cancel, 0) == 1);
     assert(range_mask.build(input[0..], 3, 1, asset, output[0..], no_cancel, 0) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [6]f32 = [0.1, 0.1, 0.1, infinity, 0.5, 0.5];
     assert(range_mask.build(nonfinite[0..], 2, 1, asset, output[0..], no_cancel, 0) == 3);
     const out_of_range: [6]f32 = [0.1, 0.1, 0.1, 8.1, 0.5, 0.5];

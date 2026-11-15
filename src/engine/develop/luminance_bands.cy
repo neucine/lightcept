@@ -26,8 +26,7 @@ pub struct BandResult {
 }
 
 fn finite(value: f64): bool {
-    const infinity = math.pow_f64(2.0, 1024.0);
-    return value > -infinity and value < infinity;
+    return core.finite_sample64(value);
 }
 
 fn bounded(ev: f64): bool {

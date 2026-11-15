@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.straighten;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -61,7 +61,7 @@ test "straighten rejects invalid asset shape input and cancellation" {
     assert(straighten.apply(input[0..], 2, 1, settings(),
         output[0..], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [3]f32 = [infinity, 0.2, 0.3];
     assert(straighten.apply(nonfinite[0..], 1, 1, settings(),
         output[0..], no_cancel, 0

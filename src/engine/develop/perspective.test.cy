@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.perspective;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -63,7 +63,7 @@ test "perspective rejects invalid quadrilateral shape input and cancellation" {
     assert(perspective.apply(input[0..], 3, 3, identity(),
         output[0..3], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     var nonfinite: [27]f32 = [0.2] ** 27;
     nonfinite[0] = infinity;
     assert(perspective.apply(nonfinite[0..], 3, 3, identity(),

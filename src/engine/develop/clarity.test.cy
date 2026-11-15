@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.clarity;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -78,7 +78,7 @@ test "clarity rejects invalid settings shape nonfinite and cancellation" {
     bad.edge_scale_y = 0.0;
     assert(clarity.apply(input[0..], 1, 1, bad, output[0..], no_cancel, 0) == 1);
     assert(clarity.apply(input[0..], 2, 1, settings(), output[0..], no_cancel, 0) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [3]f32 = [infinity, 0.2, 0.3];
     assert(clarity.apply(nonfinite[0..], 1, 1, settings(),
         output[0..], no_cancel, 0

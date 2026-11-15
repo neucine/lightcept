@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.capture_sharpening;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -90,7 +90,7 @@ test "capture sharpening validates asset shape samples and cancellation" {
     assert(capture_sharpening.apply(input[0..], 2, 1, asset(),
         output[0..], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const bad: [3]f32 = [infinity, 0.2, 0.3];
     assert(capture_sharpening.apply(bad[0..], 1, 1, asset(),
         output[0..], no_cancel, 0

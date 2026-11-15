@@ -1,3 +1,4 @@
+import .engine.core.core;
 import .engine.develop.luminance_bands;
 import .engine.color.output_color;
 
@@ -95,6 +96,6 @@ test "bands preserve RGB ratios and reject invalid data" {
         white_ev: 0.0
     };
     assert(luminance_bands.apply(invalid, 0.2, 0.2, 0.2).status == 1);
-    const infinity = output_color.exposure_gain_native(1024.0);
+    const infinity = core.positive_infinity64();
     assert(luminance_bands.apply(asset, infinity, 0.2, 0.2).status == 2);
 }

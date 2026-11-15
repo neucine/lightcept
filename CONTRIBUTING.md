@@ -5,7 +5,7 @@ active repository must stay free of Rust, Cargo, and the retired Rust adapters.
 
 ## Development setup
 
-1. Install Node.js 22 and Cyna 0.5.0 from [cyna.dev](https://cyna.dev/).
+1. Install Node.js 22 and Cyna 0.5.3 from [cyna.dev](https://cyna.dev/).
 2. Run `scripts/setup-installed-cyna.sh` to link the installed compiler. To
    reproduce the pinned compiler from source, install Zig 0.17.0 and run
    `scripts/setup-cyna-toolchain.sh` instead.

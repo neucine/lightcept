@@ -35,13 +35,13 @@ jobs:
           install -m 0555 \
             "$RUNNER_TEMP/cyna-z3/z3-4.15.4-arm64-osx-13.7.6/bin/libz3.dylib" \
             /opt/homebrew/opt/z3/lib/libz3.4.15.dylib
-      - name: Install Cyna 0.5.0
+      - name: Install Cyna 0.5.3
         run: |
           export HOME="${RUNNER_TEMP}/cyna-home"
           mkdir -p "$HOME"
           export CYNA_INSTALL_ROOT="$HOME/.cyna"
           echo "HOME=$HOME" >> "$GITHUB_ENV"
-          sh -c 'curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.0 aarch64-apple-darwin'
+          sh -c 'curl -fsSL https://cyna.dev/install.sh | sh -s -- 0.5.3 aarch64-apple-darwin'
           echo "$CYNA_INSTALL_ROOT/current/bin" >> "$GITHUB_PATH"
       - name: Link installed Cyna
         run: scripts/setup-installed-cyna.sh

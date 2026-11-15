@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.analysis.sharpness_estimate;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -30,7 +30,7 @@ test "sharpness estimate rejects radius shape nonfinite and cancellation" {
     const input: [27]f32 = [0.2] ** 27;
     assert(sharpness_estimate.measure(input[0..], 3, 3, 3, no_cancel, 0).status == 2);
     assert(sharpness_estimate.measure(input[0..], 4, 3, 1, no_cancel, 0).status == 1);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     var bad: [27]f32 = [0.2] ** 27;
     bad[4] = infinity;
     const invalid = sharpness_estimate.measure(bad[0..], 3, 3, 1, no_cancel, 0);

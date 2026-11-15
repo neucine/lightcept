@@ -1,7 +1,7 @@
 # Reproducible source inputs for the Lightcept Cyna compiler.
-cyna_version=0.5.0
+cyna_version=0.5.3
 cyna_repository=https://github.com/neucine/cyna.git
-cyna_commit=b078a22f2e6c80a25b758703136f072571235c67
+cyna_commit=cdd2e9dca262762919ce7385b59e3deb274e0af8
 zig_libraries_repository=https://github.com/neucine/zig-libs.git
-zig_libraries_commit=a91b58271be94a4e402a856403fe0fa83add1709
+zig_libraries_commit=c5b61fbdd2c7c02d875212e7111a27be3aaf2f17
 zig_version=0.17.0

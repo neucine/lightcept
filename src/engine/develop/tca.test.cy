@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.tca;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -79,7 +79,7 @@ test "TCA rejects invalid CFA shape input and cancellation" {
     bad.cfa = [0, 1, 2, 1];
     assert(tca.apply(input[0..], 2, 2, bad, output[0..], no_cancel, 0) == 1);
     assert(tca.apply(input[0..], 3, 2, settings(), output[0..], no_cancel, 0) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     const nonfinite: [4]f32 = [infinity, 0.2, 0.3, 0.4];
     assert(tca.apply(nonfinite[0..], 2, 2, settings(),
         output[0..], no_cancel, 0

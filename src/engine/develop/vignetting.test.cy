@@ -1,5 +1,5 @@
+import .engine.core.core;
 import .engine.develop.vignetting;
-import .engine.color.output_color;
 
 fn no_cancel(context: usize): bool {
     return false;
@@ -68,7 +68,7 @@ test "vignetting rejects asset shape input and cancellation" {
     assert(vignetting.apply(input[0..], 2, 2, settings(),
         output[0..3], no_cancel, 0
     ) == 2);
-    const infinity = output_color.exposure_gain_native(1024.0) as f32;
+    const infinity = core.positive_infinity32();
     var nonfinite: [12]f32 = [0.2] ** 12;
     nonfinite[0] = infinity;
     assert(vignetting.apply(nonfinite[0..], 2, 2, settings(),
